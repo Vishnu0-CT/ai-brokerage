@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.order import Transaction
 from app.models.portfolio import Holding, PortfolioConfig
 from app.models.trade import Trade
-from app.services.exceptions import InsufficientFundsError, InsufficientHoldingsError
+from app.services.exceptions import DailyLossLimitBreachedError, InsufficientFundsError, InsufficientHoldingsError
 
 
 class OrderService:
@@ -29,12 +29,57 @@ class OrderService:
         price: Decimal,
         triggered_by: uuid.UUID | None = None,
     ) -> dict:
+        await self._check_daily_loss_limit(user_id)
+
         if side == "buy":
             return await self._buy(user_id, symbol, quantity, price, triggered_by)
         elif side == "sell":
             return await self._sell(user_id, symbol, quantity, price, triggered_by)
         else:
             raise ValueError(f"Invalid side: {side}")
+
+    async def _check_daily_loss_limit(self, user_id: uuid.UUID) -> None:
+        """Block trading if today's realized P&L has breached the daily loss limit."""
+        cfg_result = await self._session.execute(
+            select(PortfolioConfig).where(PortfolioConfig.user_id == user_id)
+        )
+        config = cfg_result.scalar_one_or_none()
+        if config is None:
+            return
+
+        daily_limit = float(config.daily_loss_limit)
+        if daily_limit <= 0:
+            return
+
+        # Sum today's realized P&L from transactions
+        now = datetime.now(timezone.utc)
+        session_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        result = await self._session.execute(
+            select(Transaction)
+            .where(Transaction.user_id == user_id)
+            .where(Transaction.created_at >= session_start)
+        )
+        today_txns = result.scalars().all()
+
+        # Pair buys and sells by symbol to compute realized P&L
+        buys: dict[str, list] = {}
+        sells: dict[str, list] = {}
+        for t in today_txns:
+            bucket = buys if t.side == "buy" else sells
+            bucket.setdefault(t.symbol, []).append(t)
+
+        realized_pnl = 0.0
+        for symbol, sell_list in sells.items():
+            buy_list = buys.get(symbol, [])
+            total_buy_cost = sum(float(b.price) * float(b.quantity) for b in buy_list)
+            total_buy_qty = sum(float(b.quantity) for b in buy_list)
+            avg_buy = total_buy_cost / total_buy_qty if total_buy_qty > 0 else 0
+            for s in sell_list:
+                realized_pnl += (float(s.price) - avg_buy) * float(s.quantity)
+
+        current_loss = abs(min(0, realized_pnl))
+        if current_loss >= daily_limit:
+            raise DailyLossLimitBreachedError(current_loss, daily_limit)
 
     async def _buy(
         self, user_id: uuid.UUID, symbol: str,

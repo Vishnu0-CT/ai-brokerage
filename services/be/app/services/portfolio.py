@@ -33,6 +33,7 @@ class PortfolioService:
             "invested_value": round(invested_value, 2),
             "total_value": round(total_value, 2),
             "total_pnl": round(total_pnl, 2),
+            "daily_loss_limit": config.daily_loss_limit,
         }
 
     async def get_holdings(self, user_id: uuid.UUID) -> list[dict]:

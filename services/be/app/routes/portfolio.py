@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
+from app.models.portfolio import PortfolioConfig
 from app.schemas.portfolio import HoldingResponse
 from app.seed import DEFAULT_USER_ID
 from app.services.portfolio import PortfolioService
@@ -46,6 +50,27 @@ async def get_balance(svc: PortfolioService = Depends(get_portfolio_service)):
 @router.get("/summary")
 async def get_summary(svc: PortfolioService = Depends(get_portfolio_service)):
     return await svc.get_portfolio_summary(DEFAULT_USER_ID)
+
+
+class DailyLossLimitUpdate(BaseModel):
+    daily_loss_limit: Decimal = Field(..., gt=0, description="New daily loss limit")
+
+
+@router.patch("/daily-loss-limit")
+async def update_daily_loss_limit(
+    body: DailyLossLimitUpdate,
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.execute(
+        select(PortfolioConfig).where(PortfolioConfig.user_id == DEFAULT_USER_ID)
+    )
+    config = result.scalar_one_or_none()
+    if config is None:
+        raise HTTPException(status_code=404, detail="Portfolio config not found")
+
+    config.daily_loss_limit = body.daily_loss_limit
+    await session.commit()
+    return {"daily_loss_limit": config.daily_loss_limit}
 
 
 @router.get("/history")

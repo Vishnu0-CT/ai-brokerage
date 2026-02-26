@@ -1,4 +1,4 @@
-import { get } from './client'
+import { get, patch } from './client'
 
 export const getHoldings = (params) => {
   const qs = new URLSearchParams()
@@ -14,3 +14,6 @@ export const getSummary = () => get('/api/portfolio/summary')
 
 export const getHistory = (period = '1d') =>
   get(`/api/portfolio/history?period=${period}`)
+
+export const updateDailyLossLimit = (daily_loss_limit) =>
+  patch('/api/portfolio/daily-loss-limit', { daily_loss_limit })

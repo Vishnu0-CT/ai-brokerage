@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { useApi } from '../hooks/useApi'
-import { getBalance, getHistory } from '../api/portfolio'
+import { getBalance, getHistory, updateDailyLossLimit } from '../api/portfolio'
 import { getRiskMetrics } from '../api/alerts'
 import { getWeeklyPnl } from '../api/trades'
 import PortfolioSummary from '../components/dashboard/PortfolioSummary'
@@ -16,10 +17,29 @@ export default function Dashboard() {
   const { data: weeklyData } = useApi(() => getWeeklyPnl(), [])
   const { data: riskMetrics } = useApi(() => getRiskMetrics(), [])
 
-  const dailyLossLimit = 25000
+  const [editingLimit, setEditingLimit] = useState(false)
+  const [limitInput, setLimitInput] = useState('')
+  const [limitSaving, setLimitSaving] = useState(false)
+
+  const dailyLossLimit = balance?.daily_loss_limit || 25000
   const pnl = balance?.total_pnl || 0
   const bufferRemaining = dailyLossLimit - Math.abs(Math.min(0, pnl))
   const bufferPercent = (bufferRemaining / dailyLossLimit) * 100
+
+  const handleLimitSave = async () => {
+    const value = parseFloat(limitInput)
+    if (!value || value <= 0) return
+    setLimitSaving(true)
+    try {
+      await updateDailyLossLimit(value)
+      refetchBalance()
+      setEditingLimit(false)
+    } catch (err) {
+      console.error('Failed to update limit:', err)
+    } finally {
+      setLimitSaving(false)
+    }
+  }
 
   // Derive risk level from actual metrics
   const riskScore = (() => {
@@ -53,7 +73,43 @@ export default function Dashboard() {
         <div className="flex items-center gap-4">
           <div className="text-right">
             <div className="text-xs text-slate-500">Daily Loss Limit</div>
-            <div className="font-mono text-sm text-slate-300">{formatINR(dailyLossLimit)}</div>
+            {editingLimit ? (
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm text-slate-400">₹</span>
+                <input
+                  type="number"
+                  value={limitInput}
+                  onChange={(e) => setLimitInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleLimitSave()
+                    if (e.key === 'Escape') setEditingLimit(false)
+                  }}
+                  autoFocus
+                  className="w-24 bg-navy-700 border border-navy-500 rounded px-2 py-0.5 text-sm font-mono text-slate-200 focus:outline-none focus:border-blue-500"
+                />
+                <button
+                  onClick={handleLimitSave}
+                  disabled={limitSaving}
+                  className="text-xs text-positive hover:text-positive/80"
+                >
+                  {limitSaving ? '...' : '✓'}
+                </button>
+                <button
+                  onClick={() => setEditingLimit(false)}
+                  className="text-xs text-slate-500 hover:text-slate-400"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => { setLimitInput(dailyLossLimit); setEditingLimit(true) }}
+                className="font-mono text-sm text-slate-300 hover:text-blue-400 transition-colors cursor-pointer"
+                title="Click to edit"
+              >
+                {formatINR(dailyLossLimit)}
+              </button>
+            )}
           </div>
           <div className="w-32 h-2 bg-navy-700 rounded-full overflow-hidden">
             <div
