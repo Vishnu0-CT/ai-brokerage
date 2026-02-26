@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-export default function ToastNotification({ notification, onAction, onDismiss }) {
+export default function ToastNotification({ notification, onAction, onDismiss, index = 0 }) {
   const [isVisible, setIsVisible] = useState(true)
   const [isExiting, setIsExiting] = useState(false)
 
@@ -30,9 +30,10 @@ export default function ToastNotification({ notification, onAction, onDismiss })
 
   return (
     <div
-      className={`fixed top-20 right-6 w-96 bg-navy-800 border border-navy-600 rounded-xl shadow-2xl shadow-black/50 overflow-hidden transition-all duration-300 z-50 ${
+      className={`fixed right-6 w-96 bg-navy-800 border border-navy-600 rounded-xl shadow-2xl shadow-black/50 overflow-hidden transition-all duration-300 z-50 ${
         isExiting ? 'opacity-0 translate-x-full' : 'opacity-100 translate-x-0'
       }`}
+      style={{ top: `${80 + index * 140}px` }}
     >
       {/* Progress bar */}
       <div className="h-1 bg-navy-700 relative overflow-hidden">

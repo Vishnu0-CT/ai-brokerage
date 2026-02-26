@@ -31,18 +31,6 @@ async def websocket_chat(websocket: WebSocket, conversation_id: uuid.UUID):
             if msg_type == "text":
                 user_message = data["content"]
 
-                async def on_voice(text):
-                    await websocket.send_json({
-                        "type": "response_chunk",
-                        "content": text,
-                    })
-
-                async def on_detail(text):
-                    await websocket.send_json({
-                        "type": "detail_chunk",
-                        "content": text,
-                    })
-
                 def on_tool_activity(info):
                     asyncio.create_task(
                         websocket.send_json({"type": "tool_activity", **info})
@@ -50,13 +38,11 @@ async def websocket_chat(websocket: WebSocket, conversation_id: uuid.UUID):
 
                 result = await chat_svc.process_message_streaming(
                     conv_id, user_message,
-                    on_voice=on_voice,
-                    on_detail=on_detail,
                     on_tool_activity=on_tool_activity,
                 )
 
                 await websocket.send_json({
-                    "type": "response_complete",
+                    "type": "response",
                     "voice": result.get("voice", ""),
                     "detail": result.get("detail", ""),
                 })

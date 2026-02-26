@@ -170,7 +170,7 @@ function List({ items }) {
     <ul className="space-y-1.5 ml-1">
       {items.map((item, i) => (
         <li key={i} className="flex items-start gap-2">
-          <span className="text-accent mt-1.5 text-xs">\u2022</span>
+          <span className="text-accent mt-1.5 text-xs">{'\u2022'}</span>
           <span><InlineFormatting text={item} /></span>
         </li>
       ))}

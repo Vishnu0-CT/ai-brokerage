@@ -28,7 +28,7 @@ Always respond with valid JSON in this exact format:
 {{"voice": "<1-2 sentence spoken summary>", "detail": "<full markdown response>"}}
 
 Rules for the "voice" field:
-- 1-2 natural, conversational sentences in Hinglish (see LANGUAGE STYLE below)
+- 1-2 natural, conversational sentences (see LANGUAGE STYLE below)
 - No markdown, no tables, no special symbols
 - Speak numbers naturally (e.g., "twenty-five hundred" not "2,500")
 - Imagine you're speaking to the user

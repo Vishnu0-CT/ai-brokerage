@@ -6,7 +6,6 @@ import ChatContainer from '../assistant/ChatContainer'
 import ToastNotification from '../common/ToastNotification'
 import NotificationCenter from '../common/NotificationCenter'
 import { listConversations, createConversation, getConversation, updateConversation, deleteConversation } from '../../api/conversations'
-import { createNotification } from '../../api/notifications'
 
 export default function Layout({ children }) {
   const [isAssistantOpen, setIsAssistantOpen] = useState(false)
@@ -131,65 +130,9 @@ export default function Layout({ children }) {
     }
   }
 
-  const showToastNotification = async (notification) => {
-    const toastId = Date.now()
-    setToastNotifications(prev => [...prev, { ...notification, id: toastId }])
-    
-    // Save to database
-    try {
-      await createNotification({
-        title: notification.title,
-        message: notification.message,
-        context_type: notification.context_type || 'general',
-        context_data: notification.context_data || {},
-        actions: notification.actions || []
-      })
-    } catch (error) {
-      console.error('Failed to save notification:', error)
-    }
-  }
-
   const removeToastNotification = (id) => {
     setToastNotifications(prev => prev.filter(n => n.id !== id))
   }
-
-  // Example: Create test notifications with multiple actions (remove this in production)
-  useEffect(() => {
-    const timer1 = setTimeout(() => {
-      showToastNotification({
-        title: 'Profit Running',
-        message: 'Your RELIANCE position is up 8.5%. Should we develop a lock-in strategy?',
-        context_type: 'profit_running',
-        context_data: { symbol: 'RELIANCE', profit_percent: 8.5, current_price: 1280 },
-        actions: [
-          { id: 'lock_profit', label: 'Lock Profits', primary: true, type: 'open_chat', message: 'Help me lock in profits for my RELIANCE position' },
-          { id: 'trailing_stop', label: 'Set Trailing Stop', primary: false, type: 'open_chat', message: 'Set up a trailing stop loss for RELIANCE' },
-          { id: 'partial_exit', label: 'Partial Exit', primary: false, type: 'open_chat', message: 'Help me exit 50% of my RELIANCE position' },
-          { id: 'dismiss', label: 'Dismiss', primary: false, type: 'dismiss' }
-        ]
-      })
-    }, 3000)
-
-    const timer2 = setTimeout(() => {
-      showToastNotification({
-        title: 'High Volatility Alert',
-        message: 'NIFTY volatility has increased by 45% in the last hour. Consider hedging your positions.',
-        context_type: 'high_volatility',
-        context_data: { symbol: 'NIFTY', volatility_increase: 45, vix: 18.5 },
-        actions: [
-          { id: 'hedge', label: 'Hedge Portfolio', primary: true, type: 'open_chat', message: 'Help me hedge my portfolio against volatility' },
-          { id: 'reduce_exposure', label: 'Reduce Exposure', primary: false, type: 'open_chat', message: 'Suggest ways to reduce my market exposure' },
-          { id: 'view_analysis', label: 'View Analysis', primary: false, type: 'open_chat', message: 'Show me detailed volatility analysis' },
-          { id: 'dismiss', label: 'Dismiss', primary: false, type: 'dismiss' }
-        ]
-      })
-    }, 8000)
-
-    return () => {
-      clearTimeout(timer1)
-      clearTimeout(timer2)
-    }
-  }, [])
 
   return (
     <div className="h-screen bg-navy-900 flex flex-col overflow-hidden">
@@ -379,16 +322,16 @@ export default function Layout({ children }) {
 
       {/* Toast Notifications */}
       {toastNotifications.map((notification, index) => (
-        <div key={notification.id} style={{ top: `${80 + index * 120}px` }}>
-          <ToastNotification
-            notification={notification}
-            onAction={(action) => {
-              handleNotificationAction(notification, action)
-              removeToastNotification(notification.id)
-            }}
-            onDismiss={() => removeToastNotification(notification.id)}
-          />
-        </div>
+        <ToastNotification
+          key={notification.id}
+          index={index}
+          notification={notification}
+          onAction={(action) => {
+            handleNotificationAction(notification, action)
+            removeToastNotification(notification.id)
+          }}
+          onDismiss={() => removeToastNotification(notification.id)}
+        />
       ))}
 
       {/* Notification Center */}
