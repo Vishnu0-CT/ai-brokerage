@@ -76,9 +76,26 @@ async def remove_from_watchlist(
 
 @router.post("/seed")
 async def seed_watchlist(
+    force: bool = Query(False, description="Force seeding even if watchlist exists"),
     svc: MarketDataService = Depends(get_market_data_service),
 ):
-    """Seed default watchlist items."""
+    """
+    Seed default watchlist items.
+    
+    By default, this endpoint will not seed if watchlist already has items.
+    Use force=true to add items anyway.
+    """
+    # Check if watchlist already has items
+    existing = await svc.get_watchlist(DEFAULT_USER_ID)
+    
+    if existing and not force:
+        return {
+            "success": False,
+            "error": "Watchlist already has items. Use force=true to add more.",
+            "existing_items": len(existing),
+            "items_added": 0,
+        }
+    
     count = await svc.seed_default_watchlist(DEFAULT_USER_ID)
     return {"success": True, "items_added": count}
 

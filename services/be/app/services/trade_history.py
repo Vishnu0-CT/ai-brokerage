@@ -429,26 +429,38 @@ class TradeHistoryService:
         days: int | None = None,
         strategy: str | None = None,
         instrument: str | None = None,
-    ) -> list[dict]:
-        """Get trade history with optional filters."""
-        stmt = select(Trade).where(Trade.user_id == user_id)
+        limit: int = 100,
+        offset: int = 0,
+    ) -> dict:
+        """Get trade history with optional filters and pagination."""
+        from sqlalchemy import func
+        
+        # Base query for filtering
+        base_stmt = select(Trade).where(Trade.user_id == user_id)
         
         if days:
             start_date = datetime.now(timezone.utc) - timedelta(days=days)
-            stmt = stmt.where(Trade.date >= start_date)
+            base_stmt = base_stmt.where(Trade.date >= start_date)
         
         if strategy:
-            stmt = stmt.where(Trade.strategy == strategy)
+            base_stmt = base_stmt.where(Trade.strategy == strategy)
         
         if instrument:
-            stmt = stmt.where(Trade.instrument.ilike(f"%{instrument}%"))
+            base_stmt = base_stmt.where(Trade.instrument.ilike(f"%{instrument}%"))
         
-        stmt = stmt.order_by(Trade.date.desc(), Trade.time.desc())
+        # Get total count
+        count_stmt = select(func.count()).select_from(base_stmt.subquery())
+        total_result = await self._session.execute(count_stmt)
+        total = total_result.scalar() or 0
+        
+        # Apply ordering and pagination
+        stmt = base_stmt.order_by(Trade.date.desc(), Trade.time.desc())
+        stmt = stmt.offset(offset).limit(limit)
         
         result = await self._session.execute(stmt)
         trades = result.scalars().all()
         
-        return [
+        items = [
             {
                 "id": str(t.id),
                 "date": t.date.isoformat(),
@@ -470,6 +482,14 @@ class TradeHistoryService:
             }
             for t in trades
         ]
+        
+        return {
+            "items": items,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "has_more": offset + len(items) < total,
+        }
     
     async def calculate_analytics(
         self,
@@ -477,7 +497,8 @@ class TradeHistoryService:
         days: int | None = None,
     ) -> dict:
         """Calculate comprehensive analytics from trade history."""
-        trades = await self.get_trades(user_id, days)
+        result = await self.get_trades(user_id, days, limit=10000)
+        trades = result["items"]
         
         if not trades:
             return self._empty_analytics()
@@ -559,7 +580,8 @@ class TradeHistoryService:
     
     async def get_strategy_performance(self, user_id: uuid.UUID, days: int | None = None) -> list[dict]:
         """Get performance breakdown by strategy."""
-        trades = await self.get_trades(user_id, days)
+        result = await self.get_trades(user_id, days, limit=10000)
+        trades = result["items"]
         
         strategy_stats = {}
         for trade in trades:
@@ -587,7 +609,8 @@ class TradeHistoryService:
     
     async def get_weekly_pnl(self, user_id: uuid.UUID, weeks: int = 10) -> list[dict]:
         """Get weekly P&L trends."""
-        trades = await self.get_trades(user_id, days=weeks * 7)
+        result = await self.get_trades(user_id, days=weeks * 7, limit=10000)
+        trades = result["items"]
         
         # Group by week
         weekly_data = {}
@@ -619,8 +642,8 @@ class TradeHistoryService:
     
     async def detect_revenge_trade(self, user_id: uuid.UUID, lookback_trades: int = 10) -> dict | None:
         """Detect if recent trades show revenge trading pattern."""
-        trades = await self.get_trades(user_id)
-        recent_trades = trades[:lookback_trades]
+        result = await self.get_trades(user_id, limit=lookback_trades)
+        recent_trades = result["items"]
         
         if len(recent_trades) < 3:
             return None
@@ -646,7 +669,8 @@ class TradeHistoryService:
     
     async def detect_overtrading(self, user_id: uuid.UUID, threshold: int = 20) -> dict:
         """Detect overtrading days and their impact."""
-        trades = await self.get_trades(user_id)
+        result = await self.get_trades(user_id, limit=10000)
+        trades = result["items"]
         
         # Group by date
         daily_trades = {}

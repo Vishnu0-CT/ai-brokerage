@@ -30,14 +30,18 @@ async def get_trades(
     days: int | None = Query(None, description="Filter trades from last N days"),
     strategy: str | None = Query(None, description="Filter by strategy name"),
     instrument: str | None = Query(None, description="Filter by instrument (partial match)"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of trades to return"),
+    offset: int = Query(0, ge=0, description="Number of trades to skip"),
     svc: TradeHistoryService = Depends(get_trade_history_service),
 ):
-    """Get trade history with optional filters."""
+    """Get trade history with optional filters and pagination."""
     return await svc.get_trades(
         user_id=DEFAULT_USER_ID,
         days=days,
         strategy=strategy,
         instrument=instrument,
+        limit=limit,
+        offset=offset,
     )
 
 
@@ -107,13 +111,14 @@ async def generate_trade_history(
     Use force=true to regenerate (existing trades will be preserved, new ones added).
     """
     # Check if trades already exist
-    existing_trades = await svc.get_trades(DEFAULT_USER_ID, days=1)
+    existing_result = await svc.get_trades(DEFAULT_USER_ID, days=1, limit=1)
     
-    if existing_trades and not force:
+    if existing_result["total"] > 0 and not force:
+        all_trades_result = await svc.get_trades(DEFAULT_USER_ID, limit=1)
         return {
             "success": False,
             "error": "Trade history already exists. Use force=true to add more trades.",
-            "existing_trades": len(await svc.get_trades(DEFAULT_USER_ID)),
+            "existing_trades": all_trades_result["total"],
             "trades_generated": 0,
         }
     

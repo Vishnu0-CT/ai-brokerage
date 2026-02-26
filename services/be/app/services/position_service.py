@@ -5,11 +5,14 @@ Manages open positions, order placement, and exit functionality.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import uuid
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from decimal import Decimal
+from enum import Enum
 from typing import Any
 
 from sqlalchemy import select
@@ -19,19 +22,38 @@ from app.models.trade import Position, Trade
 
 logger = logging.getLogger(__name__)
 
-# Price cache for consistent prices within a session (keyed by symbol)
-_price_cache: dict[str, float] = {}
+
+class OrderType(str, Enum):
+    """Valid order types."""
+    BUY = "BUY"
+    SELL = "SELL"
+
+
+# Thread-safe price cache using contextvars (request-scoped)
+_price_cache_var: ContextVar[dict[str, float]] = ContextVar("price_cache", default={})
+_price_cache_lock = asyncio.Lock()
+
+
+def _get_price_cache() -> dict[str, float]:
+    """Get the request-scoped price cache."""
+    try:
+        return _price_cache_var.get()
+    except LookupError:
+        cache: dict[str, float] = {}
+        _price_cache_var.set(cache)
+        return cache
 
 
 def _get_deterministic_price(symbol: str) -> float:
     """
     Get a deterministic mock price for a symbol.
     Uses hash of symbol to seed random, ensuring consistent prices within a session.
+    Thread-safe using contextvars for request-scoped caching.
     """
-    global _price_cache
+    cache = _get_price_cache()
     
-    if symbol in _price_cache:
-        return _price_cache[symbol]
+    if symbol in cache:
+        return cache[symbol]
     
     # Use symbol hash to seed random for deterministic pricing
     symbol_hash = int(hashlib.md5(symbol.encode()).hexdigest(), 16)
@@ -46,21 +68,23 @@ def _get_deterministic_price(symbol: str) -> float:
             multiplier = 0.5 + (symbol_hash % 150) / 100  # Range: 0.5 to 2.0
             base_price = strike * 0.01 * multiplier
             price = round(base_price, 2)
-            _price_cache[symbol] = price
+            cache[symbol] = price
             return price
         except ValueError:
             pass
     
     # Fallback: deterministic price based on hash
     price = round(100 + (symbol_hash % 400), 2)
-    _price_cache[symbol] = price
+    cache[symbol] = price
     return price
 
 
 def clear_price_cache() -> None:
     """Clear the price cache (useful for testing or session reset)."""
-    global _price_cache
-    _price_cache = {}
+    try:
+        _price_cache_var.set({})
+    except LookupError:
+        pass
 
 
 class PositionService:
