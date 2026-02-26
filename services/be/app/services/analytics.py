@@ -102,6 +102,7 @@ class AnalyticsService:
             value = current_price * float(h.quantity)
             enriched.append({
                 "symbol": h.symbol,
+                "side": h.side,
                 "value": value,
                 "quantity": float(h.quantity),
             })
@@ -111,6 +112,7 @@ class AnalyticsService:
         return [
             {
                 "group": e["symbol"],
+                "side": e["side"],
                 "value": round(e["value"], 2),
                 "allocation_pct": round(e["value"] / total * 100, 2) if total > 0 else 0,
             }
@@ -149,6 +151,7 @@ class AnalyticsService:
             tick = await self._price_service.get_price(h.symbol) if self._price_service else None
             current_price = tick.price if tick else float(h.avg_price)
             qty = float(h.quantity)
+            side = h.side
             impact = 0.0
             beta: float | None = None
             is_correlated = False
@@ -158,6 +161,8 @@ class AnalyticsService:
                     impact = qty * price_change_points
                 elif price_change is not None:
                     impact = qty * current_price * price_change
+                if side == "short":
+                    impact = -impact
             elif symbol and h.symbol in corr_betas:
                 beta = corr_betas[h.symbol]
                 is_correlated = True
@@ -166,11 +171,15 @@ class AnalyticsService:
                 elif price_change_points is not None and target_price:
                     pct_change = price_change_points / target_price
                     impact = qty * current_price * pct_change * beta
+                if side == "short":
+                    impact = -impact
             elif not symbol:
                 if price_change_points is not None:
                     impact = qty * price_change_points
                 elif price_change is not None:
                     impact = qty * current_price * price_change
+                if side == "short":
+                    impact = -impact
             else:
                 continue
 
@@ -193,6 +202,7 @@ class AnalyticsService:
 
             entry = {
                 "symbol": h.symbol,
+                "side": side,
                 "quantity": qty,
                 "current_price": current_price,
                 "scenario_price": round(scenario_price, 2),
