@@ -1,10 +1,147 @@
+from __future__ import annotations
+
+import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import health
+from app.config import settings
+from app.database import async_session_factory, engine, Base
+from app.seed import seed_default_user, seed_portfolio_config, seed_demo_data, DEFAULT_USER_ID
+from app.services.price import PriceService, SimulatedPriceStream
+from app.services.price_monitor import PriceMonitor
+from app.services.scheduler import SchedulerService
 
-app = FastAPI(title="AI Brokerage — BE Service", version="0.1.0")
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
+# Indian market seed prices (from tradeai niftyHistoricalData)
+SEED_PRICES = {
+    "NIFTY": 26478.50,
+    "BANKNIFTY": 57723.00,    # Nifty * 2.18
+    "RELIANCE": 1280.00,
+    "INFY": 1550.00,
+    "TCS": 3800.00,
+}
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Starting up...")
+
+    # 1. Create tables (dev shortcut -- use alembic in prod)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    # 2. Seed default user and portfolio
+    user = await seed_default_user()
+    await seed_portfolio_config(user.id)
+    logger.info(f"Default user: {user.name} ({user.id})")
+
+    # 3. Price service
+    stream = SimulatedPriceStream(
+        seed_prices=SEED_PRICES,
+        tick_interval=settings.price_tick_interval_seconds,
+    )
+    price_service = PriceService(stream=stream)
+
+    # 4. Scheduler
+    scheduler_service = SchedulerService(
+        session_factory=async_session_factory,
+        price_service=price_service,
+    )
+    await scheduler_service.start()
+
+    # 5. Price monitor
+    price_monitor = PriceMonitor(
+        stream=stream,
+        session_factory=async_session_factory,
+        price_service=price_service,
+    )
+
+    # 6. Start price stream
+    await price_service.start()
+
+    for symbol in SEED_PRICES:
+        stream.add_symbol(symbol)
+
+    # 7. Store on app.state
+    app.state.price_service = price_service
+    app.state.price_monitor = price_monitor
+    app.state.scheduler_service = scheduler_service
+    app.state.session_factory = async_session_factory
+
+    # 8. Seed demo data
+    await seed_demo_data(user.id)
+
+    # 9. Load active conditions from DB
+    async with async_session_factory() as session:
+        from app.services.condition import ConditionService
+        from app.services.order import OrderService
+
+        condition_svc = ConditionService(
+            session=session,
+            price_service=price_service,
+            order_service=OrderService(session=session),
+        )
+
+        active = await condition_svc.get_active()
+        await price_monitor.load_active_conditions(active)
+        await scheduler_service.load_time_conditions(active)
+        await session.commit()
+        logger.info(f"Loaded {len(active)} active conditions")
+
+    # 10. Schedule portfolio snapshots
+    async def take_snapshot():
+        async with async_session_factory() as session:
+            from app.services.portfolio import PortfolioService
+            svc = PortfolioService(session, price_service)
+            await svc.take_snapshot(DEFAULT_USER_ID)
+            logger.info("Portfolio snapshot taken")
+
+    await scheduler_service.schedule_periodic(
+        take_snapshot,
+        interval_seconds=settings.snapshot_interval_minutes * 60,
+        job_id="portfolio_snapshot",
+    )
+
+    # 11. Schedule periodic alert detection (every 5 min)
+    async def run_alert_detection():
+        async with async_session_factory() as session:
+            from app.services.analytics import AnalyticsService
+            from app.services.alert_detector import AlertDetectorService
+            analytics_svc = AnalyticsService(session, price_service)
+            alert_svc = AlertDetectorService(session, analytics_svc)
+            alerts = await alert_svc.evaluate_all(DEFAULT_USER_ID)
+            if alerts:
+                logger.info(f"Alert detection: {len(alerts)} new alerts")
+
+    await scheduler_service.schedule_periodic(
+        run_alert_detection,
+        interval_seconds=300,
+        job_id="alert_detection",
+    )
+
+    logger.info("Startup complete")
+
+    yield
+
+    # Shutdown
+    logger.info("Shutting down...")
+    await price_service.stop()
+    await scheduler_service.stop()
+    await engine.dispose()
+    logger.info("Shutdown complete")
+
+
+app = FastAPI(title="AI Brokerage BE", lifespan=lifespan)
+
+# Exception handlers
+from app.middleware import register_exception_handlers
+register_exception_handlers(app)
+
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -13,12 +150,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(health.router)
+# Register routers
+from app.routes.health import router as health_router
+from app.routes.user import router as user_router
+from app.routes.portfolio import router as portfolio_router
+from app.routes.orders import router as orders_router
+from app.routes.market import router as market_router
+from app.routes.conversations import router as conversations_router
+from app.routes.alerts import router as alerts_router
+from app.routes.analytics import router as analytics_router
+from app.routes.wellbeing import router as wellbeing_router
 
-
-if __name__ == "__main__":
-    import uvicorn
-
-    from app.config import settings
-
-    uvicorn.run("app.main:app", host=settings.host, port=settings.port, reload=True)
+app.include_router(health_router)
+app.include_router(user_router)
+app.include_router(portfolio_router)
+app.include_router(orders_router)
+app.include_router(market_router)
+app.include_router(conversations_router)
+app.include_router(alerts_router)
+app.include_router(analytics_router)
+app.include_router(wellbeing_router)
