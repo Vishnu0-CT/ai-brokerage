@@ -97,8 +97,25 @@ async def get_trade_summary_for_ai(
 @router.post("/generate")
 async def generate_trade_history(
     days: int = Query(65, description="Number of days of history to generate"),
+    force: bool = Query(False, description="Force regeneration even if trades exist"),
     svc: TradeHistoryService = Depends(get_trade_history_service),
 ):
-    """Generate mock trade history with behavioral patterns."""
+    """
+    Generate mock trade history with behavioral patterns.
+    
+    By default, this endpoint will not generate trades if history already exists.
+    Use force=true to regenerate (existing trades will be preserved, new ones added).
+    """
+    # Check if trades already exist
+    existing_trades = await svc.get_trades(DEFAULT_USER_ID, days=1)
+    
+    if existing_trades and not force:
+        return {
+            "success": False,
+            "error": "Trade history already exists. Use force=true to add more trades.",
+            "existing_trades": len(await svc.get_trades(DEFAULT_USER_ID)),
+            "trades_generated": 0,
+        }
+    
     count = await svc.generate_and_save_history(DEFAULT_USER_ID, days=days)
     return {"success": True, "trades_generated": count}
