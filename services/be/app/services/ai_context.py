@@ -6,6 +6,7 @@ Includes trade history analytics, behavioral patterns, and strategy performance.
 """
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -13,6 +14,8 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.trade_history import TradeHistoryService
+
+logger = logging.getLogger(__name__)
 
 
 class AIContextService:
@@ -53,41 +56,53 @@ class AIContextService:
         Returns:
             Formatted string to be included in the system prompt.
         """
-        context = await self.get_system_prompt_context(user_id)
+        try:
+            context = await self.get_system_prompt_context(user_id)
+        except Exception as e:
+            logger.error(f"Failed to get system prompt context: {e}")
+            return "TRADING DATA: No trading history available yet."
         
         sections = []
         
-        # Overall Statistics Section
-        stats = context["trade_summary"]["overall_stats"]
-        sections.append(self._format_overall_stats(stats))
+        # Safely get trade_summary with defaults
+        trade_summary = context.get("trade_summary") or {}
         
-        # Behavioral Analysis Section
-        sections.append(self._format_behavioral_stats(stats))
+        # Overall Statistics Section
+        stats = trade_summary.get("overall_stats") or {}
+        if stats:
+            sections.append(self._format_overall_stats(stats))
+            # Behavioral Analysis Section
+            sections.append(self._format_behavioral_stats(stats))
         
         # Strategy Performance Section
-        strategy_perf = context["trade_summary"]["strategy_performance"]
-        sections.append(self._format_strategy_performance(strategy_perf))
+        strategy_perf = trade_summary.get("strategy_performance") or []
+        if strategy_perf:
+            sections.append(self._format_strategy_performance(strategy_perf))
         
         # Weekly P&L Trends Section
-        weekly_pnl = context["trade_summary"]["weekly_pnl"]
-        sections.append(self._format_weekly_trends(weekly_pnl))
+        weekly_pnl = trade_summary.get("weekly_pnl") or []
+        if weekly_pnl:
+            sections.append(self._format_weekly_trends(weekly_pnl))
         
         # Risk Metrics Section
-        risk_metrics = context["trade_summary"]["risk_metrics"]
-        sections.append(self._format_risk_metrics(risk_metrics))
+        risk_metrics = trade_summary.get("risk_metrics") or {}
+        if risk_metrics:
+            sections.append(self._format_risk_metrics(risk_metrics))
         
         # Recent Patterns Section
-        patterns = context["trade_summary"]["recent_patterns"]
-        sections.append(self._format_recent_patterns(patterns))
+        patterns = trade_summary.get("recent_patterns") or {}
+        if patterns:
+            sections.append(self._format_recent_patterns(patterns))
         
         # Period Comparison
         sections.append(self._format_period_comparison(
-            context["analytics_30d"],
-            context["analytics_60d"],
-            context["analytics_90d"],
+            context.get("analytics_30d") or {},
+            context.get("analytics_60d") or {},
+            context.get("analytics_90d") or {},
         ))
         
-        return "\n\n".join(filter(None, sections))
+        result = "\n\n".join(filter(None, sections))
+        return result if result else "TRADING DATA: No trading history available yet."
     
     def _format_overall_stats(self, stats: dict) -> str:
         """Format overall trading statistics."""

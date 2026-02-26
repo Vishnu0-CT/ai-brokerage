@@ -25,3 +25,10 @@ class MessageResponse(BaseModel):
     content: str
     tool_data: dict | None
     created_at: str
+
+
+class ConversationResponse(BaseModel):
+    id: str
+    title: str
+    created_at: str
+    messages: list[MessageResponse] = []

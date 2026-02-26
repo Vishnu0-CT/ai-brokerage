@@ -19,9 +19,22 @@ class HoldingResponse(BaseModel):
     created_at: str | None = None
 
 
+class BalanceResponse(BaseModel):
+    cash: float
+    initial_cash: float
+    invested_value: float
+    total_value: float
+    total_pnl: float
+
+
 class PortfolioBalanceResponse(BaseModel):
     cash: float
     initial_cash: float
     invested_value: float
     total_value: float
     total_pnl: float
+
+
+class PortfolioSummaryResponse(BaseModel):
+    balance: BalanceResponse
+    holdings: list[HoldingResponse]
