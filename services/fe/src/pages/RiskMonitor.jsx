@@ -34,14 +34,17 @@ export default function RiskMonitor() {
   const activeAlertCount = alerts?.filter(a => !a.dismissed)?.length || 0
   const criticalCount = alerts?.filter(a => a.severity === 'critical')?.length || 0
 
-  // Extract risk metrics safely
-  const drawdownPct = riskMetrics?.drawdown_percent || riskMetrics?.drawdown?.percent || 0
-  const drawdownValue = riskMetrics?.drawdown_value || riskMetrics?.drawdown?.value || 0
+  // Extract risk metrics safely — API returns nested objects for drawdown, trade_velocity, concentration
+  const drawdown = riskMetrics?.drawdown || {}
+  const drawdownPct = drawdown.percent || 0
+  const drawdownValue = drawdown.current || 0
   const dailyLossLimit = riskMetrics?.daily_loss_limit || 25000
-  const tradeVelocity = riskMetrics?.trade_velocity || riskMetrics?.trades_today || 0
-  const maxTradesPerDay = riskMetrics?.max_trades_per_day || 20
-  const concentrationPct = riskMetrics?.concentration_percent || riskMetrics?.concentration?.percent || 0
-  const concentrationMax = riskMetrics?.concentration_max || 100
+  const velocity = riskMetrics?.trade_velocity || {}
+  const tradeVelocity = typeof velocity === 'number' ? velocity : (velocity.count || 0)
+  const maxTradesPerDay = (typeof velocity === 'object' && velocity.avg_per_day ? Math.round(velocity.avg_per_day * 2) : riskMetrics?.max_trades_per_day) || 20
+  const concentration = riskMetrics?.concentration || {}
+  const concentrationPct = typeof concentration === 'number' ? concentration : (concentration.percent || 0)
+  const concentrationMax = 100
   const marginUsed = riskMetrics?.margin_used || riskMetrics?.margin_utilization || 0
   const marginMax = riskMetrics?.margin_total || 100
 

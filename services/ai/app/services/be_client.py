@@ -69,6 +69,13 @@ class BEClient:
         r.raise_for_status()
         return r.json()
 
+    # --- Watchlist ---
+
+    async def get_watchlist(self) -> list:
+        r = await self.client.get("/api/watchlist")
+        r.raise_for_status()
+        return r.json()
+
     # --- Market ---
 
     async def get_price(self, symbol: str) -> dict:
