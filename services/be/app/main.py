@@ -175,6 +175,7 @@ from app.routes.strategies import router as strategies_router
 from app.routes.positions import router as positions_router
 from app.routes.watchlist import router as watchlist_router
 from app.routes.watchlist import option_chain_router, expiry_router
+from app.routes.yahoo_finance import router as yahoo_finance_router
 
 app.include_router(health_router)
 app.include_router(user_router)
@@ -191,3 +192,4 @@ app.include_router(positions_router)
 app.include_router(watchlist_router)
 app.include_router(option_chain_router)
 app.include_router(expiry_router)
+app.include_router(yahoo_finance_router)
