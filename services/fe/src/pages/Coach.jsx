@@ -12,11 +12,20 @@ import Card, { CardHeader } from '../components/common/Card'
 export default function Coach() {
   const { data: coaching, loading: coachingLoading, error: coachingError, refetch: refetchCoaching } = useApi(() => getCoaching(), [])
   const { data: timeDataRaw, loading: timeLoading } = useApi(() => getWinRateByTime(), [])
-  const { data: instrumentData, loading: instrumentLoading } = useApi(() => getInstrumentStats(), [])
+  const { data: instrumentDataRaw, loading: instrumentLoading } = useApi(() => getInstrumentStats(), [])
 
   // Transform timeData from object to array format for WinRateChart
   const timeData = timeDataRaw ? Object.entries(timeDataRaw).map(([key, value]) => ({
     label: key.charAt(0).toUpperCase() + key.slice(1),
+    winRate: value.win_rate ?? value.winRate ?? 0,
+    trades: value.trades ?? 0,
+    pnl: value.pnl ?? 0,
+  })) : []
+
+  // Transform instrumentData from object to array format for InstrumentBreakdown
+  const instrumentData = instrumentDataRaw ? Object.entries(instrumentDataRaw).map(([key, value]) => ({
+    instrument: key,
+    avgPnl: value.avg_pnl ?? value.avgPnl ?? 0,
     winRate: value.win_rate ?? value.winRate ?? 0,
     trades: value.trades ?? 0,
     pnl: value.pnl ?? 0,
@@ -38,7 +47,7 @@ export default function Coach() {
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-100">Trading Coach</h1>
+          <h1 className="text-2xl font-semibold text-slate-100">Clear Coach</h1>
           <p className="text-sm text-slate-500 mt-1">AI-powered analysis of your trading patterns</p>
         </div>
         <div className="flex items-center gap-2 px-3 py-1.5 bg-navy-700/50 rounded-full">
