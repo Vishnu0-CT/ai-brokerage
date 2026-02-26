@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import httpx
 
+from app.utils.http_logging import EVENT_HOOKS
+
 
 class BEClient:
     """HTTP client for the BE service REST API.
@@ -11,7 +13,9 @@ class BEClient:
     """
 
     def __init__(self, base_url: str, timeout: float = 10.0) -> None:
-        self.client = httpx.AsyncClient(base_url=base_url, timeout=timeout)
+        self.client = httpx.AsyncClient(
+            base_url=base_url, timeout=timeout, event_hooks=EVENT_HOOKS,
+        )
 
     # --- Health ---
 

@@ -6,11 +6,13 @@ import logging
 from typing import Any
 
 import anthropic
+import httpx
 
 from app.config import settings
 from app.prompts.system import build_system_prompt
 from app.tools import ALL_TOOLS
 from app.tools.dispatcher import ToolDispatcher
+from app.utils.http_logging import EVENT_HOOKS
 from app.utils.text import strip_fences
 
 logger = logging.getLogger(__name__)
@@ -35,6 +37,7 @@ class ChatService:
         self._client = anthropic.AsyncAnthropic(
             api_key=settings.anthropic_api_key,
             base_url=settings.anthropic_base_url,
+            http_client=httpx.AsyncClient(event_hooks=EVENT_HOOKS),
         )
 
     async def load_history(self, conversation_id: str) -> list[dict]:
