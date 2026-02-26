@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import async_session_factory, engine, Base
-from app.seed import seed_default_user, seed_portfolio_config, seed_demo_data, DEFAULT_USER_ID
+from app.seed import seed_default_user, seed_portfolio_config, seed_demo_data, seed_trade_history, seed_watchlist, DEFAULT_USER_ID
 from app.services.price import PriceService, SimulatedPriceStream
 from app.services.price_monitor import PriceMonitor
 from app.services.scheduler import SchedulerService
@@ -74,6 +74,16 @@ async def lifespan(app: FastAPI):
 
     # 8. Seed demo data
     await seed_demo_data(user.id)
+
+    # 8a. Seed enhanced trade history with behavioral patterns
+    trade_count = await seed_trade_history(user.id)
+    if trade_count > 0:
+        logger.info(f"Trade history seeded: {trade_count} trades with behavioral patterns")
+
+    # 8b. Seed default watchlist
+    watchlist_count = await seed_watchlist(user.id)
+    if watchlist_count > 0:
+        logger.info(f"Watchlist seeded: {watchlist_count} items")
 
     # 9. Load active conditions from DB
     async with async_session_factory() as session:
@@ -160,6 +170,11 @@ from app.routes.conversations import router as conversations_router
 from app.routes.alerts import router as alerts_router
 from app.routes.analytics import router as analytics_router
 from app.routes.wellbeing import router as wellbeing_router
+from app.routes.trades import router as trades_router
+from app.routes.strategies import router as strategies_router
+from app.routes.positions import router as positions_router
+from app.routes.watchlist import router as watchlist_router
+from app.routes.watchlist import option_chain_router, expiry_router
 
 app.include_router(health_router)
 app.include_router(user_router)
@@ -170,3 +185,9 @@ app.include_router(conversations_router)
 app.include_router(alerts_router)
 app.include_router(analytics_router)
 app.include_router(wellbeing_router)
+app.include_router(trades_router)
+app.include_router(strategies_router)
+app.include_router(positions_router)
+app.include_router(watchlist_router)
+app.include_router(option_chain_router)
+app.include_router(expiry_router)

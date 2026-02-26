@@ -187,11 +187,92 @@ async def seed_demo_data(user_id: uuid.UUID) -> None:
         await session.commit()
 
 
+async def seed_trade_history(user_id: uuid.UUID) -> int:
+    """Seed enhanced trade history with behavioral patterns."""
+    from app.models.trade import Trade
+    from app.services.trade_history import generate_trade_history
+    
+    async with async_session_factory() as session:
+        # Check if already seeded
+        result = await session.execute(select(Trade).where(Trade.user_id == user_id).limit(1))
+        if result.scalar_one_or_none() is not None:
+            return 0  # Already seeded
+        
+        # Generate trade history with behavioral patterns
+        trades_data = generate_trade_history(user_id, days=65)
+        
+        for trade_data in trades_data:
+            trade = Trade(
+                id=uuid.uuid4(),
+                user_id=trade_data["user_id"],
+                date=trade_data["date"],
+                time=trade_data["time"],
+                instrument=trade_data["instrument"],
+                trade_type=trade_data["trade_type"],
+                entry_price=Decimal(str(trade_data["entry_price"])),
+                exit_price=Decimal(str(trade_data["exit_price"])),
+                quantity=trade_data["quantity"],
+                pnl=Decimal(str(trade_data["pnl"])),
+                pnl_percent=Decimal(str(trade_data["pnl_percent"])),
+                hold_time_minutes=trade_data["hold_time_minutes"],
+                strategy=trade_data["strategy"],
+                tags=trade_data["tags"],
+                notes=trade_data["notes"],
+                is_revenge_trade=trade_data["is_revenge_trade"],
+                is_overtrade=trade_data["is_overtrade"],
+                is_tilt_trade=trade_data["is_tilt_trade"],
+            )
+            session.add(trade)
+        
+        await session.commit()
+        return len(trades_data)
+
+
+async def seed_watchlist(user_id: uuid.UUID) -> int:
+    """Seed default watchlist items."""
+    from app.models.watchlist import WatchlistItem
+    from app.services.market_data import DEFAULT_WATCHLIST
+    
+    async with async_session_factory() as session:
+        # Check if already seeded
+        result = await session.execute(
+            select(WatchlistItem).where(WatchlistItem.user_id == user_id).limit(1)
+        )
+        if result.scalar_one_or_none() is not None:
+            return 0  # Already seeded
+        
+        for i, item in enumerate(DEFAULT_WATCHLIST):
+            watchlist_item = WatchlistItem(
+                id=uuid.uuid4(),
+                user_id=user_id,
+                symbol=item["symbol"],
+                name=item["name"],
+                instrument_type=item["instrument_type"],
+                lot_size=item["lot_size"],
+                tick_size=item["tick_size"],
+                display_order=i,
+            )
+            session.add(watchlist_item)
+        
+        await session.commit()
+        return len(DEFAULT_WATCHLIST)
+
+
 async def main() -> None:
     user = await seed_default_user()
     print(f"Default user: {user.name} ({user.id})")
     await seed_portfolio_config(user.id)
     print(f"Portfolio config seeded: {INITIAL_CASH} starting cash")
+    
+    # Seed enhanced trade history
+    trade_count = await seed_trade_history(user.id)
+    if trade_count > 0:
+        print(f"Trade history seeded: {trade_count} trades with behavioral patterns")
+    
+    # Seed watchlist
+    watchlist_count = await seed_watchlist(user.id)
+    if watchlist_count > 0:
+        print(f"Watchlist seeded: {watchlist_count} items")
 
 
 if __name__ == "__main__":

@@ -4,7 +4,10 @@ from app.models.alert import Alert
 from app.models.conversation import Conversation, Message
 from app.models.order import ConditionalOrder, Transaction
 from app.models.portfolio import Holding, MarginConfig, PortfolioConfig, PortfolioSnapshot
+from app.models.strategy import Strategy, StrategyVersion
+from app.models.trade import Position, Trade
 from app.models.user import User
+from app.models.watchlist import WatchlistItem
 
 __all__ = [
     "Alert",
@@ -16,5 +19,10 @@ __all__ = [
     "MarginConfig",
     "PortfolioConfig",
     "PortfolioSnapshot",
+    "Position",
+    "Strategy",
+    "StrategyVersion",
+    "Trade",
     "User",
+    "WatchlistItem",
 ]
