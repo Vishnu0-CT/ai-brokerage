@@ -51,4 +51,11 @@ async def websocket_chat(websocket: WebSocket, conversation_id: uuid.UUID):
         logger.info(f"WebSocket disconnected: {conversation_id}")
     except Exception:
         logger.exception(f"WebSocket error: {conversation_id}")
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "message": "Something went wrong. Please try again.",
+            })
+        except Exception:
+            pass
         await websocket.close()

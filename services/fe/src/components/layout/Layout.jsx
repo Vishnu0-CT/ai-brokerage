@@ -5,7 +5,7 @@ import { useChat } from '../../hooks/useChat'
 import ChatContainer from '../assistant/ChatContainer'
 import ToastNotification from '../common/ToastNotification'
 import NotificationCenter from '../common/NotificationCenter'
-import { listConversations, createConversation, getConversation, updateConversation, deleteConversation } from '../../api/conversations'
+import { listConversations, createConversation, updateConversation, deleteConversation } from '../../api/conversations'
 
 export default function Layout({ children }) {
   const [isAssistantOpen, setIsAssistantOpen] = useState(false)
@@ -14,10 +14,16 @@ export default function Layout({ children }) {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const [conversations, setConversations] = useState([])
   const [currentConversationId, setCurrentConversationId] = useState(null)
-  const [selectedMessages, setSelectedMessages] = useState([])
   const [editingId, setEditingId] = useState(null)
   const [editingTitle, setEditingTitle] = useState('')
-  const { messages, sendMessage, isLoading, toolActivity, connected, conversationId } = useChat('Assistant')
+  const { messages, sendMessage, isLoading, toolActivity, connected, error, conversationId } = useChat('Assistant', currentConversationId)
+
+  // Sync initial conversation ID from useChat so currentConversationId is never stale
+  useEffect(() => {
+    if (conversationId && !currentConversationId) {
+      setCurrentConversationId(conversationId)
+    }
+  }, [conversationId])
 
   // Load conversations on mount
   useEffect(() => {
@@ -39,34 +45,16 @@ export default function Layout({ children }) {
     try {
       const newConv = await createConversation('New Chat')
       setCurrentConversationId(newConv.id)
-      await loadConversations()
       setIsHistoryOpen(false)
+      await loadConversations()
     } catch (error) {
       console.error('Failed to create conversation:', error)
     }
   }
 
-  const handleSelectConversation = async (convId) => {
+  const handleSelectConversation = (convId) => {
     setCurrentConversationId(convId)
     setIsHistoryOpen(false)
-    
-    // Load messages from the selected conversation
-    try {
-      const conv = await getConversation(convId)
-      if (conv.messages?.length > 0) {
-        setSelectedMessages(conv.messages.map(m => ({
-          id: m.id,
-          role: m.role,
-          content: m.content,
-          timestamp: m.created_at,
-        })))
-      } else {
-        setSelectedMessages([])
-      }
-    } catch (error) {
-      console.error('Failed to load conversation:', error)
-      setSelectedMessages([])
-    }
   }
 
   const handleRenameStart = (conv) => {
@@ -100,28 +88,23 @@ export default function Layout({ children }) {
       await loadConversations()
       if (currentConversationId === convId) {
         setCurrentConversationId(null)
-        setSelectedMessages([])
       }
     } catch (error) {
       console.error('Failed to delete conversation:', error)
     }
   }
 
-  const handleNotificationAction = (notification, action) => {
+  const handleNotificationAction = async (notification, action) => {
     if (action.type === 'open_chat') {
-      // Use the existing conversation (useChat hook manages it)
-      // Clear current selection to show the main chat
-      setCurrentConversationId(null)
-      setSelectedMessages([])
-      
-      // Open AI assistant
       setIsAssistantOpen(true)
-      
-      // Auto-send message to chat
+      try {
+        const newConv = await createConversation('New Chat')
+        setCurrentConversationId(newConv.id)
+      } catch (error) {
+        console.error('Failed to create conversation:', error)
+      }
       if (action.message) {
-        setTimeout(() => {
-          sendMessage(action.message)
-        }, 500)
+        setTimeout(() => sendMessage(action.message), 500)
       }
     } else if (action.type === 'execute') {
       // Execute action directly
@@ -310,11 +293,11 @@ export default function Layout({ children }) {
           
           {/* Chat Container */}
           <div className="flex-1 overflow-hidden">
-            <ChatContainer 
-              messages={currentConversationId && currentConversationId !== conversationId ? selectedMessages : messages} 
-              onSend={sendMessage} 
-              isLoading={isLoading} 
-              toolActivity={toolActivity} 
+            <ChatContainer
+              messages={messages}
+              onSend={sendMessage}
+              isLoading={isLoading}
+              toolActivity={toolActivity}
             />
           </div>
         </div>

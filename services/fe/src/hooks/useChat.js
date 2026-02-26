@@ -10,7 +10,7 @@ import { useWebSocket } from './useWebSocket'
  * 4. Handle { type: "response" } and { type: "tool_activity" } from WS
  * 5. Save messages to BE for persistence
  */
-export function useChat(conversationTitle = 'Chat') {
+export function useChat(conversationTitle = 'Chat', externalConversationId = null) {
   const [conversationId, setConversationId] = useState(null)
   const [messages, setMessages] = useState([])
   const [isLoading, setIsLoading] = useState(false)
@@ -18,8 +18,21 @@ export function useChat(conversationTitle = 'Chat') {
   const [error, setError] = useState(null)
   const pendingRef = useRef(false)
 
-  // Initialize conversation
+  // Sync external conversation ID when provided
   useEffect(() => {
+    if (externalConversationId !== null) {
+      setConversationId(externalConversationId)
+      setMessages([])
+      setToolActivity(null)
+      setIsLoading(false)
+      setError(null)
+      pendingRef.current = false
+    }
+  }, [externalConversationId])
+
+  // Initialize conversation (only when not externally managed)
+  useEffect(() => {
+    if (externalConversationId !== null) return
     let cancelled = false
 
     async function init() {
@@ -37,7 +50,7 @@ export function useChat(conversationTitle = 'Chat') {
 
     init()
     return () => { cancelled = true }
-  }, [conversationTitle])
+  }, [conversationTitle, externalConversationId])
 
   const streamingMessageRef = useRef(null)
 
@@ -123,6 +136,11 @@ export function useChat(conversationTitle = 'Chat') {
           content: assistantMessage.content,
         }).catch(() => {})
       }
+    } else if (msg.type === 'error') {
+      setToolActivity(null)
+      pendingRef.current = false
+      setIsLoading(false)
+      setError(msg.message || 'An error occurred')
     }
   }, [conversationId])
 
@@ -163,6 +181,16 @@ export function useChat(conversationTitle = 'Chat') {
     setError(null)
     setToolActivity(null)
   }, [])
+
+  // Safety net: reset loading state on ungraceful disconnect
+  useEffect(() => {
+    if (!connected && pendingRef.current) {
+      pendingRef.current = false
+      setIsLoading(false)
+      setToolActivity(null)
+      setError('Connection lost. Reconnecting...')
+    }
+  }, [connected])
 
   // Load existing messages if conversation has history
   useEffect(() => {
