@@ -7,6 +7,12 @@ class ConversationCreate(BaseModel):
     title: str = "New Conversation"
 
 
+class ConversationResponse(BaseModel):
+    id: str
+    title: str
+    created_at: str
+
+
 class MessageCreate(BaseModel):
     role: str
     content: str
