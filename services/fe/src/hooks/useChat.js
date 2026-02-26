@@ -39,11 +39,70 @@ export function useChat(conversationTitle = 'Chat') {
     return () => { cancelled = true }
   }, [conversationTitle])
 
+  const streamingMessageRef = useRef(null)
+
   // Handle incoming WS messages
   const handleWsMessage = useCallback((msg) => {
     if (msg.type === 'tool_activity') {
       setToolActivity(msg)
+    } else if (msg.type === 'response_chunk') {
+      // Streaming chunk received - update message in real-time
+      setMessages(prev => {
+        const lastMsg = prev[prev.length - 1]
+        
+        if (lastMsg && lastMsg.role === 'assistant' && lastMsg.isStreaming) {
+          // Update existing streaming message
+          return [
+            ...prev.slice(0, -1),
+            {
+              ...lastMsg,
+              content: lastMsg.content + msg.content,
+            }
+          ]
+        } else {
+          // Create new streaming message
+          const newMsg = {
+            id: `msg_${Date.now()}`,
+            role: 'assistant',
+            content: msg.content,
+            isStreaming: true,
+            timestamp: new Date().toISOString(),
+          }
+          streamingMessageRef.current = newMsg.id
+          return [...prev, newMsg]
+        }
+      })
+    } else if (msg.type === 'response_complete') {
+      // Streaming complete - finalize message
+      setToolActivity(null)
+      pendingRef.current = false
+      setIsLoading(false)
+
+      setMessages(prev => {
+        const lastMsg = prev[prev.length - 1]
+        if (lastMsg && lastMsg.role === 'assistant' && lastMsg.isStreaming) {
+          const finalMsg = {
+            ...lastMsg,
+            isStreaming: false,
+            content: msg.detail || lastMsg.content,
+          }
+          
+          // Persist final message to BE
+          if (conversationId) {
+            saveMessage(conversationId, {
+              role: 'assistant',
+              content: finalMsg.content,
+            }).catch(() => {})
+          }
+          
+          return [...prev.slice(0, -1), finalMsg]
+        }
+        return prev
+      })
+
+      streamingMessageRef.current = null
     } else if (msg.type === 'response') {
+      // Fallback for non-streaming responses
       setToolActivity(null)
       pendingRef.current = false
       setIsLoading(false)

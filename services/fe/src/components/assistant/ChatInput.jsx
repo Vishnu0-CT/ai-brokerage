@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from 'react'
 export default function ChatInput({ onSend, isLoading, disabled }) {
   const [message, setMessage] = useState('')
   const inputRef = useRef(null)
+  const containerRef = useRef(null)
 
   useEffect(() => {
     if (!isLoading && inputRef.current) {
@@ -10,11 +11,33 @@ export default function ChatInput({ onSend, isLoading, disabled }) {
     }
   }, [isLoading])
 
+  // Auto-resize textarea based on content
+  useEffect(() => {
+    const textarea = inputRef.current
+    const container = containerRef.current
+    
+    if (textarea && container) {
+      // Reset height to get accurate scrollHeight
+      textarea.style.height = 'auto'
+      
+      // Calculate max height (25% of viewport height)
+      const maxHeight = window.innerHeight * 0.25
+      
+      // Set height based on content, but cap at maxHeight
+      const newHeight = Math.min(textarea.scrollHeight, maxHeight)
+      textarea.style.height = `${newHeight}px`
+    }
+  }, [message])
+
   const handleSubmit = (e) => {
     e.preventDefault()
     if (message.trim() && !isLoading && !disabled) {
       onSend(message)
       setMessage('')
+      // Reset height after sending
+      if (inputRef.current) {
+        inputRef.current.style.height = 'auto'
+      }
     }
   }
 
@@ -27,7 +50,10 @@ export default function ChatInput({ onSend, isLoading, disabled }) {
 
   return (
     <form onSubmit={handleSubmit} className="relative">
-      <div className="flex items-end gap-3 p-4 bg-navy-800 border border-navy-600 rounded-2xl focus-within:border-accent/50 transition-colors">
+      <div 
+        ref={containerRef}
+        className="flex items-end gap-3 p-4 bg-navy-800 border border-navy-600 rounded-2xl focus-within:border-accent/50 transition-colors"
+      >
         <textarea
           ref={inputRef}
           value={message}
@@ -36,14 +62,17 @@ export default function ChatInput({ onSend, isLoading, disabled }) {
           placeholder="Ask about your portfolio, risk, or trades..."
           disabled={isLoading || disabled}
           rows={1}
-          className="flex-1 bg-transparent text-slate-200 placeholder-slate-500 resize-none outline-none text-sm leading-relaxed max-h-32"
-          style={{ minHeight: '24px' }}
+          className="flex-1 bg-transparent text-slate-200 placeholder-slate-500 resize-none outline-none text-sm leading-relaxed overflow-y-auto"
+          style={{ 
+            minHeight: '24px',
+            maxHeight: '25vh',
+          }}
         />
 
         <button
           type="submit"
           disabled={!message.trim() || isLoading || disabled}
-          className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all ${
+          className={`flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-xl transition-all ${
             message.trim() && !isLoading
               ? 'bg-accent text-navy-900 hover:bg-accent-light'
               : 'bg-navy-700 text-slate-500 cursor-not-allowed'

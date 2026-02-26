@@ -43,44 +43,142 @@ export default function ChatMessage({ message }) {
 }
 
 function MessageContent({ content }) {
-  const paragraphs = content.split('\n\n')
+  const blocks = parseContent(content)
 
   return (
     <div className="space-y-3">
-      {paragraphs.map((paragraph, i) => (
-        <Paragraph key={i} text={paragraph} />
+      {blocks.map((block, i) => (
+        <Block key={i} block={block} />
       ))}
     </div>
   )
 }
 
-function Paragraph({ text }) {
-  const lines = text.split('\n')
-  const isList = lines.every(line => line.trim().startsWith('-') || line.trim().startsWith('\u2022') || /^\d+\./.test(line.trim()))
+function parseContent(content) {
+  const blocks = []
+  const lines = content.split('\n')
+  let i = 0
 
-  if (isList) {
-    return (
-      <ul className="space-y-1.5 ml-1">
-        {lines.map((line, i) => (
-          <li key={i} className="flex items-start gap-2">
-            <span className="text-accent mt-1.5 text-xs">\u2022</span>
-            <span><InlineFormatting text={line.replace(/^[-\u2022]\s*/, '').replace(/^\d+\.\s*/, '')} /></span>
-          </li>
-        ))}
-      </ul>
-    )
+  while (i < lines.length) {
+    const line = lines[i]
+
+    // Code block
+    if (line.trim().startsWith('```')) {
+      const language = line.trim().slice(3).trim()
+      const codeLines = []
+      i++
+      while (i < lines.length && !lines[i].trim().startsWith('```')) {
+        codeLines.push(lines[i])
+        i++
+      }
+      blocks.push({ type: 'code', language, content: codeLines.join('\n') })
+      i++
+      continue
+    }
+
+    // Heading
+    if (line.trim().match(/^#{1,6}\s/)) {
+      const level = line.trim().match(/^#+/)[0].length
+      const text = line.trim().replace(/^#+\s*/, '')
+      blocks.push({ type: 'heading', level, text })
+      i++
+      continue
+    }
+
+    // List
+    if (line.trim().match(/^[-*•]\s/) || line.trim().match(/^\d+\.\s/)) {
+      const listItems = []
+      while (i < lines.length && (lines[i].trim().match(/^[-*•]\s/) || lines[i].trim().match(/^\d+\.\s/))) {
+        listItems.push(lines[i].trim().replace(/^[-*•]\s*/, '').replace(/^\d+\.\s*/, ''))
+        i++
+      }
+      blocks.push({ type: 'list', items: listItems })
+      continue
+    }
+
+    // Paragraph
+    if (line.trim()) {
+      const paragraphLines = []
+      while (i < lines.length && lines[i].trim() && !lines[i].trim().startsWith('```') && !lines[i].trim().match(/^#{1,6}\s/) && !lines[i].trim().match(/^[-*•]\s/) && !lines[i].trim().match(/^\d+\.\s/)) {
+        paragraphLines.push(lines[i])
+        i++
+      }
+      blocks.push({ type: 'paragraph', text: paragraphLines.join('\n') })
+      continue
+    }
+
+    i++
   }
 
-  if (text.startsWith('**') && text.includes(':**')) {
-    const [heading, ...rest] = text.split(':**')
-    return (
-      <div>
-        <span className="font-semibold text-slate-100">{heading.replace(/\*\*/g, '')}:</span>
-        <span><InlineFormatting text={rest.join(':**')} /></span>
+  return blocks
+}
+
+function Block({ block }) {
+  switch (block.type) {
+    case 'code':
+      return <CodeBlock language={block.language} content={block.content} />
+    case 'heading':
+      return <Heading level={block.level} text={block.text} />
+    case 'list':
+      return <List items={block.items} />
+    case 'paragraph':
+      return <Paragraph text={block.text} />
+    default:
+      return null
+  }
+}
+
+function CodeBlock({ language, content }) {
+  return (
+    <div className="relative group">
+      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          onClick={() => navigator.clipboard.writeText(content)}
+          className="px-2 py-1 text-xs bg-navy-600 hover:bg-navy-500 text-slate-300 rounded"
+        >
+          Copy
+        </button>
       </div>
-    )
-  }
+      {language && (
+        <div className="text-xs text-slate-500 mb-1 font-mono">{language}</div>
+      )}
+      <pre className="bg-navy-900 border border-navy-600 rounded-lg p-3 overflow-x-auto">
+        <code className="text-sm font-mono text-slate-300">{content}</code>
+      </pre>
+    </div>
+  )
+}
 
+function Heading({ level, text }) {
+  const sizes = {
+    1: 'text-xl font-bold',
+    2: 'text-lg font-bold',
+    3: 'text-base font-semibold',
+    4: 'text-base font-semibold',
+    5: 'text-sm font-semibold',
+    6: 'text-sm font-semibold',
+  }
+  return (
+    <div className={`${sizes[level]} text-slate-100 mt-4 mb-2`}>
+      <InlineFormatting text={text} />
+    </div>
+  )
+}
+
+function List({ items }) {
+  return (
+    <ul className="space-y-1.5 ml-1">
+      {items.map((item, i) => (
+        <li key={i} className="flex items-start gap-2">
+          <span className="text-accent mt-1.5 text-xs">\u2022</span>
+          <span><InlineFormatting text={item} /></span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function Paragraph({ text }) {
   return <p><InlineFormatting text={text} /></p>
 }
 
