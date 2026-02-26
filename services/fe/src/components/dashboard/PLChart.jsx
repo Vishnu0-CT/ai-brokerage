@@ -1,13 +1,23 @@
+import { useMemo } from 'react'
 import { XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Area, AreaChart } from 'recharts'
-import { formatINR } from '../../utils/formatters'
+import { formatINR, formatTime } from '../../utils/formatters'
 import Card, { CardHeader } from '../common/Card'
 
 export default function PLChart({ data }) {
   if (!data || data.length === 0) return null
 
-  const currentPnl = data[data.length - 1]?.pnl || 0
-  const maxPnl = Math.max(...data.map(d => d.pnl))
-  const minPnl = Math.min(...data.map(d => d.pnl))
+  // Transform API shape {total_value, cash, invested_value, timestamp} → {pnl, time}
+  const chartData = useMemo(() => {
+    const baseline = data[0]?.total_value ?? 0
+    return data.map(d => ({
+      pnl: (d.pnl != null ? d.pnl : (d.total_value != null ? d.total_value - baseline : 0)),
+      time: d.time || (d.timestamp ? formatTime(d.timestamp) : ''),
+    }))
+  }, [data])
+
+  const currentPnl = chartData[chartData.length - 1]?.pnl || 0
+  const maxPnl = Math.max(...chartData.map(d => d.pnl))
+  const minPnl = Math.min(...chartData.map(d => d.pnl))
 
   const isPositive = currentPnl >= 0
   const strokeColor = isPositive ? '#34D399' : '#F87171'
@@ -51,7 +61,7 @@ export default function PLChart({ data }) {
 
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+          <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor={strokeColor} stopOpacity={0.3} />
