@@ -70,7 +70,7 @@ export default function Trade() {
     try {
       await createPosition({
         symbol: fullSymbol,
-        order_type: orderType,
+        order_type: direction,
         quantity: quantity * selectedSymbol.lot_size,
         lots: quantity,
         price: premium,

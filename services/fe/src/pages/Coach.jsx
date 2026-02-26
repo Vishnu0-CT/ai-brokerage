@@ -11,8 +11,16 @@ import Card, { CardHeader } from '../components/common/Card'
 
 export default function Coach() {
   const { data: coaching, loading: coachingLoading, error: coachingError, refetch: refetchCoaching } = useApi(() => getCoaching(), [])
-  const { data: timeData, loading: timeLoading } = useApi(() => getWinRateByTime(), [])
+  const { data: timeDataRaw, loading: timeLoading } = useApi(() => getWinRateByTime(), [])
   const { data: instrumentData, loading: instrumentLoading } = useApi(() => getInstrumentStats(), [])
+
+  // Transform timeData from object to array format for WinRateChart
+  const timeData = timeDataRaw ? Object.entries(timeDataRaw).map(([key, value]) => ({
+    label: key.charAt(0).toUpperCase() + key.slice(1),
+    winRate: value.win_rate ?? value.winRate ?? 0,
+    trades: value.trades ?? 0,
+    pnl: value.pnl ?? 0,
+  })) : []
 
   const summary = coaching?.summary || {}
   const insights = coaching?.insights || []

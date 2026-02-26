@@ -405,11 +405,8 @@ export default function StrategyBuilder() {
             )}
 
             {/* Metadata */}
-            <div className="pt-4 border-t border-navy-700 flex items-center justify-between text-xs text-slate-500">
+            <div className="pt-4 border-t border-navy-700 text-xs text-slate-500">
               <span>Created {timeAgo(selectedStrategy.created_at || selectedStrategy.createdAt)}</span>
-              {selectedStrategy.confidence && (
-                <span>Confidence: {Math.round(selectedStrategy.confidence * 100)}%</span>
-              )}
             </div>
           </Card>
         </div>
