@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.alert import Alert
 from app.models.order import Transaction
 from app.models.portfolio import Holding, PortfolioConfig
-from app.services.margin import MarginService
 from app.utils.formatters import format_inr
 
 logger = logging.getLogger(__name__)
@@ -456,19 +455,17 @@ class AlertDetectorService:
         exposure = await self._analytics.calculate_exposure(user_id)
         max_concentration = max((e["allocation_pct"] for e in exposure), default=0)
 
-        # Margin utilization
+        # Margin utilization - use initial_cash as the total available margin
         holdings_result = await self._session.execute(
             select(Holding).where(Holding.user_id == user_id)
         )
         holdings = holdings_result.scalars().all()
         invested_value = sum(float(h.avg_price) * float(h.quantity) for h in holdings)
 
-        try:
-            margin_svc = MarginService(self._session)
-            bp = await margin_svc.get_buying_power(user_id)
-            margin_total = bp["buying_power"]
-        except Exception:
-            margin_total = invested_value
+        # Use initial_cash as the total margin available
+        margin_total = initial_cash if initial_cash > 0 else 1  # Avoid division by zero
+        # Calculate margin utilization as percentage of initial capital
+        margin_utilization_pct = (invested_value / margin_total * 100) if margin_total > 0 else 0
 
         # Win rate
         today_wins = sum(1 for t in today_trades if t["is_win"])
@@ -504,6 +501,7 @@ class AlertDetectorService:
             "margin": {
                 "used": round(invested_value, 2),
                 "total": round(margin_total, 2),
+                "utilization_pct": round(margin_utilization_pct, 1),
             },
             "today_stats": {
                 "trades": len(today_trades),
