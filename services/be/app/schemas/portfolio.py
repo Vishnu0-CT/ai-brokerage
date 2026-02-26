@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 class HoldingResponse(BaseModel):
     symbol: str
+    side: str
     quantity: int
     avg_price: float
     current_price: float

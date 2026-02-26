@@ -45,17 +45,25 @@ class PortfolioService:
         for h in holdings:
             tick = await self._price_service.get_price(h.symbol)
             current_price = tick.price if tick else float(h.avg_price)
-            pnl = (current_price - float(h.avg_price)) * float(h.quantity)
-            pnl_pct = ((current_price - float(h.avg_price)) / float(h.avg_price)) * 100
+            qty = float(h.quantity)
+            avg = float(h.avg_price)
+
+            if h.side == "short":
+                unrealized = (avg - current_price) * qty
+            else:
+                unrealized = (current_price - avg) * qty
+
+            pnl_pct = (unrealized / (avg * qty)) * 100 if avg * qty else 0
 
             enriched.append({
                 "symbol": h.symbol,
+                "side": h.side,
                 "quantity": h.quantity,
                 "avg_price": h.avg_price,
                 "current_price": current_price,
-                "unrealized_pnl": round(pnl, 2),
+                "unrealized_pnl": round(unrealized, 2),
                 "realized_pnl": None,
-                "pnl": round(pnl, 2),
+                "pnl": round(unrealized, 2),
                 "pnl_pct": round(pnl_pct, 2),
             })
 
