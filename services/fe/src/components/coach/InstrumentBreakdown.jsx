@@ -37,7 +37,7 @@ export default function InstrumentBreakdown({ data }) {
                     {formatINR(item.avgPnl, true)}
                   </div>
                   <div className="text-xs text-slate-500">
-                    {item.winRate.toFixed(0)}% win \u2022 {item.trades} trades
+                    {item.winRate.toFixed(0)}% win {'\u2022'} {item.trades} trades
                   </div>
                 </div>
               </div>

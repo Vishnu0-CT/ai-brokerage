@@ -63,7 +63,7 @@ function Paragraph({ text }) {
       <ul className="space-y-1.5 ml-1">
         {lines.map((line, i) => (
           <li key={i} className="flex items-start gap-2">
-            <span className="text-accent mt-1.5 text-xs">\u2022</span>
+            <span className="text-accent mt-1.5 text-xs">{'\u2022'}</span>
             <span><InlineFormatting text={line.replace(/^[-\u2022]\s*/, '').replace(/^\d+\.\s*/, '')} /></span>
           </li>
         ))}
