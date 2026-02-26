@@ -29,9 +29,8 @@ class OrderService:
         price: Decimal,
         triggered_by: uuid.UUID | None = None,
     ) -> dict:
-        await self._check_daily_loss_limit(user_id)
-
         if side == "buy":
+            await self._check_daily_loss_limit(user_id)
             return await self._buy(user_id, symbol, quantity, price, triggered_by)
         elif side == "sell":
             return await self._sell(user_id, symbol, quantity, price, triggered_by)
@@ -39,7 +38,7 @@ class OrderService:
             raise ValueError(f"Invalid side: {side}")
 
     async def _check_daily_loss_limit(self, user_id: uuid.UUID) -> None:
-        """Block trading if today's realized P&L has breached the daily loss limit."""
+        """Block buying if realized + unrealized P&L has breached the daily loss limit."""
         cfg_result = await self._session.execute(
             select(PortfolioConfig).where(PortfolioConfig.user_id == user_id)
         )
@@ -77,7 +76,26 @@ class OrderService:
             for s in sell_list:
                 realized_pnl += (float(s.price) - avg_buy) * float(s.quantity)
 
-        current_loss = abs(min(0, realized_pnl))
+        # Add unrealized P&L from open holdings
+        unrealized_pnl = 0.0
+        holdings_result = await self._session.execute(
+            select(Holding).where(Holding.user_id == user_id)
+        )
+        for h in holdings_result.scalars().all():
+            current_price = float(h.avg_price)
+            if self._price_service:
+                tick = await self._price_service.get_price(h.symbol)
+                if tick:
+                    current_price = tick.price
+            avg = float(h.avg_price)
+            qty = float(h.quantity)
+            if h.side == "short":
+                unrealized_pnl += (avg - current_price) * qty
+            else:
+                unrealized_pnl += (current_price - avg) * qty
+
+        total_pnl = realized_pnl + unrealized_pnl
+        current_loss = abs(min(0, total_pnl))
         if current_loss >= daily_limit:
             raise DailyLossLimitBreachedError(current_loss, daily_limit)
 

@@ -21,9 +21,9 @@ export default function Dashboard() {
   const [limitInput, setLimitInput] = useState('')
   const [limitSaving, setLimitSaving] = useState(false)
 
-  const dailyLossLimit = balance?.daily_loss_limit || 25000
-  const pnl = balance?.total_pnl || 0
-  const bufferRemaining = dailyLossLimit - Math.abs(Math.min(0, pnl))
+  const dailyLossLimit = riskMetrics?.daily_loss_limit || balance?.daily_loss_limit || 25000
+  const todayPnl = riskMetrics?.today_stats?.pnl ?? balance?.total_pnl ?? 0
+  const bufferRemaining = dailyLossLimit - Math.abs(Math.min(0, todayPnl))
   const bufferPercent = (bufferRemaining / dailyLossLimit) * 100
 
   const handleLimitSave = async () => {
