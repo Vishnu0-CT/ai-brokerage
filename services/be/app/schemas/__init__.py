@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from app.schemas.conversation import ConversationCreate, ConversationResponse, MessageCreate, MessageResponse
 from app.schemas.order import ConditionCreate, OrderCreate
-from app.schemas.portfolio import BalanceResponse, HoldingResponse, PortfolioSummaryResponse
+from app.schemas.portfolio import HoldingResponse, PortfolioBalanceResponse
 from app.schemas.trade import (
     ExitPositionRequest,
     PositionCreate,
@@ -51,9 +51,8 @@ __all__ = [
     "ConditionCreate",
     "OrderCreate",
     # Portfolio
-    "BalanceResponse",
     "HoldingResponse",
-    "PortfolioSummaryResponse",
+    "PortfolioBalanceResponse",
     # Trade
     "ExitPositionRequest",
     "PositionCreate",

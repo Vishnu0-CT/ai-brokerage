@@ -19,9 +19,9 @@ dependencies = [
     "pydantic-settings>=2.0.0",
 
     # Voice pipeline (uncomment when ready)
-    # "pipecat-ai[websocket,silero]==0.0.102",
-    # "mlx-whisper",
-    # "kokoro-onnx",
+    "pipecat-ai[websocket,silero]==0.0.102",
+    "mlx-whisper",
+    "kokoro-onnx",
 ]
 
 [build-system]
