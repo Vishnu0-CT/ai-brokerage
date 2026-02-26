@@ -12,7 +12,7 @@ from sqlalchemy import select
 from app.config import settings
 from app.database import async_session_factory
 from app.models.order import Transaction
-from app.models.portfolio import Holding, PortfolioConfig
+from app.models.portfolio import Holding, MarginConfig, PortfolioConfig, PortfolioSnapshot
 from app.models.user import User
 
 DEFAULT_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
@@ -46,11 +46,24 @@ async def seed_portfolio_config(user_id: uuid.UUID) -> None:
             session.add(config)
             await session.commit()
 
+        # Seed margin config (5x leverage for F&O)
+        margin_result = await session.execute(
+            select(MarginConfig).where(MarginConfig.user_id == user_id)
+        )
+        if margin_result.scalar_one_or_none() is None:
+            margin_cfg = MarginConfig(
+                user_id=user_id,
+                margin_multiplier=Decimal("5.0"),
+                maintenance_margin_pct=Decimal("25.0"),
+            )
+            session.add(margin_cfg)
+            await session.commit()
 
-# Indian F&O demo holdings (from tradeai mockPortfolio)
+
+# Indian F&O demo holdings — prices are option premiums, not underlying index values
 DEMO_HOLDINGS = [
-    {"symbol": "NIFTY", "side": "long", "quantity": Decimal("300"), "avg_price": Decimal("26200.00")},
-    {"symbol": "BANKNIFTY", "side": "short", "quantity": Decimal("75"), "avg_price": Decimal("58200.00")},
+    {"symbol": "NIFTY 26200 CE", "side": "long", "quantity": Decimal("150"), "avg_price": Decimal("245.00")},
+    {"symbol": "BANKNIFTY 58200 PE", "side": "short", "quantity": Decimal("75"), "avg_price": Decimal("310.00")},
     {"symbol": "RELIANCE", "side": "long", "quantity": Decimal("100"), "avg_price": Decimal("1280.00")},
     {"symbol": "INFY", "side": "long", "quantity": Decimal("200"), "avg_price": Decimal("1550.00")},
     {"symbol": "TCS", "side": "long", "quantity": Decimal("50"), "avg_price": Decimal("3800.00")},
@@ -256,6 +269,63 @@ async def seed_watchlist(user_id: uuid.UUID) -> int:
         
         await session.commit()
         return len(DEFAULT_WATCHLIST)
+
+
+async def seed_portfolio_snapshots(user_id: uuid.UUID) -> int:
+    """Seed 30 days of portfolio snapshots so the dashboard chart has data."""
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(PortfolioSnapshot).where(PortfolioSnapshot.user_id == user_id).limit(1)
+        )
+        if result.scalar_one_or_none() is not None:
+            return 0  # Already seeded
+
+        cfg_result = await session.execute(
+            select(PortfolioConfig).where(PortfolioConfig.user_id == user_id)
+        )
+        config = cfg_result.scalar_one_or_none()
+        if config is None:
+            return 0
+
+        initial = float(config.initial_cash)
+        now = datetime.now(timezone.utc)
+        total_value = initial
+        count = 0
+
+        for day_offset in range(30, 0, -1):
+            day = now - timedelta(days=day_offset)
+            if day.weekday() >= 5:
+                continue
+
+            # Simulate daily P&L: slight upward drift with noise
+            daily_return = random.gauss(0.001, 0.015)
+            total_value *= (1 + daily_return)
+            invested = total_value * random.uniform(0.4, 0.6)
+            cash = total_value - invested
+
+            # Multiple snapshots per day (every ~30 min during market hours 9:15-15:30)
+            for hour in range(9, 16):
+                for minute in (15, 45) if hour == 9 else (0, 30):
+                    if hour == 15 and minute > 30:
+                        continue
+                    intraday_noise = random.gauss(0, total_value * 0.003)
+                    snap_value = total_value + intraday_noise
+                    snap_invested = invested + intraday_noise * 0.7
+                    snap_cash = snap_value - snap_invested
+
+                    ts = day.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    snapshot = PortfolioSnapshot(
+                        user_id=user_id,
+                        total_value=Decimal(str(round(snap_value, 2))),
+                        cash=Decimal(str(round(snap_cash, 2))),
+                        invested_value=Decimal(str(round(snap_invested, 2))),
+                        created_at=ts,
+                    )
+                    session.add(snapshot)
+                    count += 1
+
+        await session.commit()
+        return count
 
 
 async def main() -> None:

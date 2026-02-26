@@ -1,5 +1,6 @@
 import { useApi } from '../hooks/useApi'
 import { getBalance, getHistory } from '../api/portfolio'
+import { getRiskMetrics } from '../api/alerts'
 import { getWeeklyPnl } from '../api/trades'
 import PortfolioSummary from '../components/dashboard/PortfolioSummary'
 import PositionsTable from '../components/dashboard/PositionsTable'
@@ -13,11 +14,32 @@ export default function Dashboard() {
   const { data: balance, loading: balanceLoading, error: balanceError, refetch: refetchBalance } = useApi(() => getBalance(), [])
   const { data: historyData } = useApi(() => getHistory('1d'), [])
   const { data: weeklyData } = useApi(() => getWeeklyPnl(), [])
+  const { data: riskMetrics } = useApi(() => getRiskMetrics(), [])
 
   const dailyLossLimit = 25000
   const pnl = balance?.total_pnl || 0
   const bufferRemaining = dailyLossLimit - Math.abs(Math.min(0, pnl))
   const bufferPercent = (bufferRemaining / dailyLossLimit) * 100
+
+  // Derive risk level from actual metrics
+  const riskScore = (() => {
+    if (!riskMetrics) return { level: 'Low', reason: 'No data' }
+    let score = 0
+    const reasons = []
+    const ddPct = riskMetrics.overall_drawdown?.percent || 0
+    if (ddPct > 30) { score += 3; reasons.push('High drawdown') }
+    else if (ddPct > 15) { score += 2; reasons.push('Moderate drawdown') }
+    const concPct = riskMetrics.concentration?.percent || 0
+    if (concPct > 70) { score += 2; reasons.push('Concentrated position') }
+    else if (concPct > 50) { score += 1; reasons.push('Moderate concentration') }
+    const velPct = riskMetrics.trade_velocity?.percent || 0
+    if (velPct > 200) { score += 2; reasons.push('High trade velocity') }
+    else if (velPct > 130) { score += 1; reasons.push('Elevated velocity') }
+    const winRate = riskMetrics.today_stats?.win_rate ?? 50
+    if (riskMetrics.today_stats?.trades > 0 && winRate < 30) { score += 1; reasons.push('Low win rate') }
+    const level = score >= 5 ? 'Critical' : score >= 3 ? 'High' : score >= 1 ? 'Moderate' : 'Low'
+    return { level, reason: reasons[0] || 'Within limits' }
+  })()
 
   return (
     <div className="space-y-6">
@@ -82,15 +104,15 @@ export default function Dashboard() {
         <QuickAction
           icon={<svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
           label="Max Drawdown"
-          value={formatINR(0)}
-          sublabel="Today's low"
+          value={formatINR(riskMetrics?.overall_drawdown?.current || 0)}
+          sublabel={riskMetrics?.overall_drawdown?.percent != null ? `${riskMetrics.overall_drawdown.percent.toFixed(1)}% from peak` : "Today's low"}
           highlight
         />
         <QuickAction
           icon={<svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>}
           label="Risk Level"
-          value="Moderate"
-          sublabel="Based on positions"
+          value={riskScore.level}
+          sublabel={riskScore.reason}
         />
       </div>
     </div>

@@ -65,7 +65,7 @@ export default function Trade() {
     const direction = orderSide.startsWith('BUY') ? 'BUY' : 'SELL'
     const strikeData = optionType === 'CE' ? selectedStrike.call : selectedStrike.put
     const premium = orderType === 'MARKET' ? strikeData?.ltp : (strikeData?.ask || strikeData?.ltp)
-    const fullSymbol = `${selectedSymbol.symbol} ${selectedExpiry.date} ${selectedStrike.strike} ${optionType}`
+    const fullSymbol = `${selectedSymbol.symbol} ${selectedStrike.strike} ${optionType}`
 
     try {
       await createPosition({

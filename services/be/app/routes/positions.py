@@ -22,7 +22,8 @@ def get_order_service(
     session: AsyncSession = Depends(get_session),
 ) -> OrderService:
     price_service = getattr(request.app.state, "price_service", None)
-    margin_service = getattr(request.app.state, "margin_service", None)
+    margin_cls = getattr(request.app.state, "margin_service", None)
+    margin_service = margin_cls(session) if margin_cls else None
     return OrderService(session, margin_service, price_service)
 
 

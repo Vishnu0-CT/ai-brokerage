@@ -24,12 +24,10 @@ async function request(path, options = {}) {
   if (!res.ok) {
     let data
     try { data = await res.json() } catch { data = null }
-    
     // Handle FastAPI validation errors (detail is an array)
     let message = `Request failed (${res.status})`
     if (data?.detail) {
       if (Array.isArray(data.detail)) {
-        // FastAPI validation errors: [{loc: [...], msg: "...", type: "..."}]
         message = data.detail.map(err => {
           const field = err.loc?.slice(-1)[0] || 'field'
           return `${field}: ${err.msg}`
@@ -37,10 +35,12 @@ async function request(path, options = {}) {
       } else if (typeof data.detail === 'string') {
         message = data.detail
       }
+    } else if (data?.error) {
+      message = data.error
     } else if (data?.message) {
       message = data.message
     }
-    
+
     throw new ApiError(message, res.status, data)
   }
 

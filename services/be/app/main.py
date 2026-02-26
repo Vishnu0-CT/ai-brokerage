@@ -8,9 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import async_session_factory, engine, Base
-from app.seed import seed_default_user, seed_portfolio_config, seed_demo_data, seed_trade_history, seed_watchlist, DEFAULT_USER_ID
+from app.seed import seed_default_user, seed_portfolio_config, seed_demo_data, seed_trade_history, seed_watchlist, seed_portfolio_snapshots, DEFAULT_USER_ID
 from app.services.price import PriceService, SimulatedPriceStream
 from app.services.price_monitor import PriceMonitor
+from app.services.margin import MarginService
 from app.services.scheduler import SchedulerService
 
 logging.basicConfig(level=logging.INFO)
@@ -71,6 +72,7 @@ async def lifespan(app: FastAPI):
     app.state.price_monitor = price_monitor
     app.state.scheduler_service = scheduler_service
     app.state.session_factory = async_session_factory
+    app.state.margin_service = MarginService
 
     # 8. Seed demo data
     await seed_demo_data(user.id)
@@ -84,6 +86,11 @@ async def lifespan(app: FastAPI):
     watchlist_count = await seed_watchlist(user.id)
     if watchlist_count > 0:
         logger.info(f"Watchlist seeded: {watchlist_count} items")
+
+    # 8c. Seed portfolio snapshots for dashboard chart
+    snapshot_count = await seed_portfolio_snapshots(user.id)
+    if snapshot_count > 0:
+        logger.info(f"Portfolio snapshots seeded: {snapshot_count} snapshots")
 
     # 9. Load active conditions from DB
     async with async_session_factory() as session:

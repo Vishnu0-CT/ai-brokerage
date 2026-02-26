@@ -391,7 +391,7 @@ class AlertDetectorService:
             if datetime.fromisoformat(t["created_at"]) >= session_start
         ]
 
-        # Drawdown
+        # Drawdown (today only)
         running_pnl = 0.0
         max_pnl = 0.0
         max_drawdown = 0.0
@@ -404,11 +404,25 @@ class AlertDetectorService:
             if drawdown > max_drawdown:
                 max_drawdown = drawdown
 
+        # Drawdown (overall — across all classified trades)
+        overall_running = 0.0
+        overall_peak = 0.0
+        overall_max_dd = 0.0
+        for t in classified:
+            trade_pnl = (float(t["price"]) - t["avg_buy_price"]) * float(t["quantity"])
+            overall_running += trade_pnl
+            if overall_running > overall_peak:
+                overall_peak = overall_running
+            dd = overall_peak - overall_running
+            if dd > overall_max_dd:
+                overall_max_dd = dd
         config_result = await self._session.execute(
             select(PortfolioConfig).where(PortfolioConfig.user_id == user_id)
         )
         config = config_result.scalar_one_or_none()
         daily_limit = float(config.daily_loss_limit) if config else 25000
+        initial_cash = float(config.initial_cash) if config else 0
+        overall_dd_pct = (overall_max_dd / initial_cash * 100) if initial_cash > 0 else 0
 
         # Trade velocity
         week_start = session_start - timedelta(days=7)
@@ -446,6 +460,10 @@ class AlertDetectorService:
             "drawdown": {
                 "current": round(max_drawdown, 2),
                 "percent": round((max_drawdown / daily_limit) * 100, 1) if daily_limit > 0 else 0,
+            },
+            "overall_drawdown": {
+                "current": round(overall_max_dd, 2),
+                "percent": round(overall_dd_pct, 1),
             },
             "trade_velocity": {
                 "count": len(today_trades),
