@@ -331,6 +331,29 @@ class MarketDataService:
         await self._session.commit()
         return len(DEFAULT_WATCHLIST)
     
+    async def search_tickers(self, user_id: uuid.UUID, query: str, limit: int = 10) -> list[dict]:
+        """Search watchlist items by symbol or name using substring match."""
+        pattern = f"%{query.upper()}%"
+        result = await self._session.execute(
+            select(WatchlistItem)
+            .where(
+                WatchlistItem.user_id == user_id,
+                WatchlistItem.symbol.ilike(pattern) | WatchlistItem.name.ilike(pattern),
+            )
+            .order_by(WatchlistItem.display_order)
+            .limit(limit)
+        )
+        items = result.scalars().all()
+        return [
+            {
+                "symbol": item.symbol,
+                "name": item.name,
+                "type": item.instrument_type,
+                "lot_size": item.lot_size,
+            }
+            for item in items
+        ]
+
     async def get_watchlist(self, user_id: uuid.UUID) -> list[dict]:
         """Get user's watchlist with current prices."""
         result = await self._session.execute(

@@ -46,6 +46,16 @@ async def get_watchlist(
     return await svc.get_watchlist(DEFAULT_USER_ID)
 
 
+@router.get("/search")
+async def search_tickers(
+    q: str = Query(..., min_length=1, description="Search query for symbol or name"),
+    limit: int = Query(10, ge=1, le=50),
+    svc: MarketDataService = Depends(get_market_data_service),
+):
+    """Search available tickers by symbol or name."""
+    return await svc.search_tickers(DEFAULT_USER_ID, q, limit)
+
+
 @router.post("")
 async def add_to_watchlist(
     body: WatchlistAddRequest,

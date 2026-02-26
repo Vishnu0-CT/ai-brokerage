@@ -2,6 +2,25 @@ from __future__ import annotations
 
 MARKET_DATA_TOOLS = [
     {
+        "name": "search_tickers",
+        "description": (
+            "Search for available tickers by symbol or company name. "
+            "Use this to validate or find tickers before placing trades or fetching prices. "
+            "Accepts partial matches (e.g., 'RELI' finds RELIANCE, 'HDFC' finds HDFCBANK). "
+            "Returns matching symbols with name, type, and lot size."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search term — a ticker symbol, company name, or partial match",
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    {
         "name": "get_price",
         "description": "Get the current price of a stock or instrument. Returns price, change, and change percentage.",
         "input_schema": {

@@ -76,6 +76,11 @@ class BEClient:
         r.raise_for_status()
         return r.json()
 
+    async def search_tickers(self, query: str, limit: int = 10) -> list:
+        r = await self.client.get("/api/watchlist/search", params={"q": query, "limit": limit})
+        r.raise_for_status()
+        return r.json()
+
     # --- Market ---
 
     async def get_price(self, symbol: str) -> dict:
