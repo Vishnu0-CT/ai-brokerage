@@ -459,6 +459,69 @@ class StrategyService:
                 "timeframe": self._extract_timeframe(description),
             })
         
+        # VIX/IV patterns for options selling
+        vix_match = re.search(r'(india\s*)?vix\s*(is\s*)?(above|below|>|<|high|low)\s*(\d+)?', description_lower)
+        if vix_match:
+            direction = vix_match.group(3)
+            value = int(vix_match.group(4)) if vix_match.group(4) else (15 if direction in ["above", ">", "high"] else 12)
+            
+            operator = "greater_than" if direction in ["above", ">", "high"] else "less_than"
+            entry_conditions.append({
+                "type": "indicator",
+                "indicator": "India VIX",
+                "operator": operator,
+                "value": value,
+                "timeframe": "daily",
+            })
+        
+        # IV high/low patterns
+        if "iv is high" in description_lower or "high iv" in description_lower:
+            entry_conditions.append({
+                "type": "indicator",
+                "indicator": "IV Percentile",
+                "operator": "greater_than",
+                "value": 70,
+                "timeframe": "daily",
+            })
+        elif "iv is low" in description_lower or "low iv" in description_lower:
+            entry_conditions.append({
+                "type": "indicator",
+                "indicator": "IV Percentile",
+                "operator": "less_than",
+                "value": 30,
+                "timeframe": "daily",
+            })
+        
+        # Strangle/Straddle patterns
+        if "strangle" in description_lower:
+            delta_match = re.search(r'delta\s*(\d+\.?\d*)', description_lower)
+            delta = float(delta_match.group(1)) if delta_match else 0.15
+            
+            entry_conditions.append({
+                "type": "strategy",
+                "strategy_type": "strangle",
+                "delta": delta,
+                "otm": "otm" in description_lower,
+            })
+        
+        if "straddle" in description_lower:
+            entry_conditions.append({
+                "type": "strategy",
+                "strategy_type": "straddle",
+                "atm": "atm" in description_lower,
+            })
+        
+        # Iron condor patterns
+        if "iron condor" in description_lower:
+            width_match = re.search(r'(\d+)\s*points?\s*away', description_lower)
+            width = int(width_match.group(1)) if width_match else 500
+            
+            entry_conditions.append({
+                "type": "strategy",
+                "strategy_type": "iron_condor",
+                "width": width,
+            })
+        
         result["entry_conditions"] = entry_conditions
         
         # Parse exit conditions
@@ -499,6 +562,48 @@ class StrategyService:
                     "value": "bearish",
                     "timeframe": self._extract_timeframe(description),
                 })
+        
+        # Options selling exit conditions
+        # Exit at X% profit
+        profit_exit_match = re.search(r'exit\s*(at)?\s*(\d+)\s*%\s*profit', description_lower)
+        if profit_exit_match:
+            value = int(profit_exit_match.group(2))
+            exit_conditions.append({
+                "type": "profit_target",
+                "value": value,
+                "unit": "percent",
+            })
+        
+        # Exit X days before expiry
+        expiry_exit_match = re.search(r'(\d+)\s*days?\s*before\s*expiry', description_lower)
+        if expiry_exit_match:
+            days = int(expiry_exit_match.group(1))
+            exit_conditions.append({
+                "type": "time_based",
+                "condition": "days_before_expiry",
+                "value": days,
+            })
+        
+        # Exit at expiry
+        if "at expiry" in description_lower or "on expiry" in description_lower:
+            exit_conditions.append({
+                "type": "time_based",
+                "condition": "at_expiry",
+            })
+        
+        # Exit at specific time
+        time_exit_match = re.search(r'exit\s*(at|by)?\s*(\d{1,2}):?(\d{2})?\s*(am|pm)?', description_lower)
+        if time_exit_match:
+            hour = int(time_exit_match.group(2))
+            minute = int(time_exit_match.group(3)) if time_exit_match.group(3) else 0
+            period = time_exit_match.group(4)
+            if period == "pm" and hour < 12:
+                hour += 12
+            exit_conditions.append({
+                "type": "time_based",
+                "condition": "at_time",
+                "value": f"{hour:02d}:{minute:02d}",
+            })
         
         result["exit_conditions"] = exit_conditions
         

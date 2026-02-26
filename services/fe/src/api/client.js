@@ -24,11 +24,24 @@ async function request(path, options = {}) {
   if (!res.ok) {
     let data
     try { data = await res.json() } catch { data = null }
-    throw new ApiError(
-      data?.detail || data?.message || `Request failed (${res.status})`,
-      res.status,
-      data,
-    )
+    
+    // Handle FastAPI validation errors (detail is an array)
+    let message = `Request failed (${res.status})`
+    if (data?.detail) {
+      if (Array.isArray(data.detail)) {
+        // FastAPI validation errors: [{loc: [...], msg: "...", type: "..."}]
+        message = data.detail.map(err => {
+          const field = err.loc?.slice(-1)[0] || 'field'
+          return `${field}: ${err.msg}`
+        }).join('; ')
+      } else if (typeof data.detail === 'string') {
+        message = data.detail
+      }
+    } else if (data?.message) {
+      message = data.message
+    }
+    
+    throw new ApiError(message, res.status, data)
   }
 
   if (res.status === 204) return null

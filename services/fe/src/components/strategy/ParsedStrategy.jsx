@@ -4,25 +4,18 @@ import ConditionBadge from './ConditionBadge'
 export default function ParsedStrategy({ strategy, onConfirm, onEdit, confirmLabel = 'Confirm & Save Strategy' }) {
   if (!strategy) return null
 
-  const confidenceColor = strategy.confidence >= 0.9
-    ? 'text-positive'
-    : strategy.confidence >= 0.7
-      ? 'text-yellow-400'
-      : 'text-negative'
+  // Handle both camelCase and snake_case from API
+  const entryConditions = strategy.entryConditions || strategy.entry_conditions || []
+  const exitConditions = strategy.exitConditions || strategy.exit_conditions || []
+  const positionSize = strategy.positionSize || strategy.position_size || {}
+  const stopLoss = strategy.stopLoss || strategy.stop_loss
+  const target = strategy.target
 
   return (
     <Card className="border-2 border-accent/30">
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <h3 className="text-lg font-semibold text-slate-100">{strategy.name}</h3>
-          <p className="text-sm text-slate-400 mt-1">{strategy.description}</p>
-        </div>
-        <div className={`flex items-center gap-1 text-sm ${confidenceColor}`}>
-          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-          </svg>
-          {Math.round(strategy.confidence * 100)}% confidence
-        </div>
+      <div className="mb-4">
+        <h3 className="text-lg font-semibold text-slate-100">{strategy.name}</h3>
+        <p className="text-sm text-slate-400 mt-1">{strategy.description}</p>
       </div>
 
       {/* Entry Conditions */}
@@ -31,9 +24,13 @@ export default function ParsedStrategy({ strategy, onConfirm, onEdit, confirmLab
           Entry Conditions
         </div>
         <div className="flex flex-wrap gap-2">
-          {strategy.entryConditions?.map((condition, idx) => (
-            <ConditionBadge key={idx} condition={condition} type="entry" />
-          ))}
+          {entryConditions.length > 0 ? (
+            entryConditions.map((condition, idx) => (
+              <ConditionBadge key={idx} condition={condition} type="entry" />
+            ))
+          ) : (
+            <span className="text-sm text-slate-500 italic">No specific conditions parsed</span>
+          )}
         </div>
       </div>
 
@@ -42,23 +39,39 @@ export default function ParsedStrategy({ strategy, onConfirm, onEdit, confirmLab
         <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-3">
           Action
         </div>
-        <div className="flex items-center gap-3">
-          <span className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${
-            strategy.action?.type === 'BUY'
-              ? 'bg-positive/20 text-positive'
-              : 'bg-negative/20 text-negative'
-          }`}>
-            {strategy.action?.type}
-          </span>
-          <span className="text-slate-200 font-medium">
-            {strategy.action?.quantity} lot{strategy.action?.quantity > 1 ? 's' : ''}
-          </span>
-          <span className="text-slate-300">
-            {strategy.action?.instrument} {strategy.action?.strikeSelection} {strategy.action?.optionType}
-          </span>
-          <span className="text-xs text-slate-500 bg-navy-700 px-2 py-1 rounded">
-            {strategy.action?.orderType}
-          </span>
+        <div className="flex items-center gap-3 flex-wrap">
+          {strategy.action ? (
+            <>
+              <span className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${
+                strategy.action?.type === 'BUY'
+                  ? 'bg-positive/20 text-positive'
+                  : 'bg-negative/20 text-negative'
+              }`}>
+                {strategy.action?.type}
+              </span>
+              <span className="text-slate-200 font-medium">
+                {strategy.action?.quantity} lot{strategy.action?.quantity > 1 ? 's' : ''}
+              </span>
+              <span className="text-slate-300">
+                {strategy.action?.instrument} {strategy.action?.strikeSelection} {strategy.action?.optionType}
+              </span>
+              <span className="text-xs text-slate-500 bg-navy-700 px-2 py-1 rounded">
+                {strategy.action?.orderType}
+              </span>
+            </>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-negative/20 text-negative">
+                SELL
+              </span>
+              <span className="text-slate-200 font-medium">
+                {positionSize.value || 1} lot{(positionSize.value || 1) > 1 ? 's' : ''}
+              </span>
+              <span className="text-sm text-slate-400 italic">
+                (Action derived from strategy type)
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -68,9 +81,19 @@ export default function ParsedStrategy({ strategy, onConfirm, onEdit, confirmLab
           Exit Conditions
         </div>
         <div className="flex flex-wrap gap-2">
-          {strategy.exitConditions?.map((condition, idx) => (
-            <ConditionBadge key={idx} condition={condition} type="exit" />
-          ))}
+          {exitConditions.length > 0 ? (
+            exitConditions.map((condition, idx) => (
+              <ConditionBadge key={idx} condition={condition} type="exit" />
+            ))
+          ) : (
+            <span className="text-sm text-slate-500 italic">No exit conditions specified</span>
+          )}
+          {stopLoss && (
+            <ConditionBadge condition={{ type: 'stoploss', value: stopLoss.value, unit: stopLoss.unit }} type="exit" />
+          )}
+          {target && (
+            <ConditionBadge condition={{ type: 'target', value: target.value, unit: target.unit }} type="exit" />
+          )}
         </div>
       </div>
 

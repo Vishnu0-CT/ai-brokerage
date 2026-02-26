@@ -1,13 +1,15 @@
 const CONDITION_ICONS = {
-  price_relative: '\ud83d\udcc8',
-  price_absolute: '\ud83d\udcb0',
-  indicator: '\ud83d\udcca',
-  oi: '\ud83d\udcc9',
-  time: '\u23f0',
-  target: '\ud83c\udfaf',
-  stoploss: '\ud83d\uded1',
-  time_based: '\u23f1\ufe0f',
-  trailing: '\ud83d\udccd'
+  price_relative: '📈',
+  price_absolute: '💰',
+  indicator: '📊',
+  oi: '📉',
+  time: '⏰',
+  target: '🎯',
+  stoploss: '🛑',
+  time_based: '⏱️',
+  trailing: '📍',
+  strategy: '📋',
+  profit_target: '💵',
 }
 
 const OPERATOR_LABELS = {
@@ -38,7 +40,7 @@ const INDICATOR_LABELS = {
 }
 
 export default function ConditionBadge({ condition, type = 'entry' }) {
-  const icon = CONDITION_ICONS[condition.type] || '\ud83d\udccb'
+  const icon = CONDITION_ICONS[condition.type] || '📋'
 
   const formatCondition = () => {
     if (type === 'exit') {
@@ -48,9 +50,20 @@ export default function ConditionBadge({ condition, type = 'entry' }) {
         case 'stoploss':
           return `Stop Loss -${condition.value}${condition.unit === 'percent' ? '%' : ' pts'}`
         case 'time_based':
+          if (condition.condition === 'days_before_expiry') {
+            return `Exit ${condition.value} days before expiry`
+          }
+          if (condition.condition === 'at_expiry') {
+            return `Exit at expiry`
+          }
+          if (condition.condition === 'at_time') {
+            return `Exit at ${condition.value}`
+          }
           return `Exit at ${condition.value}`
         case 'trailing':
           return `Trailing SL ${condition.value}${condition.unit === 'percent' ? '%' : ' pts'}`
+        case 'profit_target':
+          return `Exit at ${condition.value}% profit`
         default:
           return JSON.stringify(condition)
       }
@@ -59,13 +72,32 @@ export default function ConditionBadge({ condition, type = 'entry' }) {
     const indicator = INDICATOR_LABELS[condition.indicator] || condition.indicator
     const operator = OPERATOR_LABELS[condition.operator] || condition.operator
 
+    // Strategy type conditions (strangle, straddle, iron_condor)
+    if (condition.type === 'strategy') {
+      const strategyType = condition.strategy_type || condition.strategyType
+      if (strategyType === 'strangle') {
+        const delta = condition.delta || 0.15
+        const otm = condition.otm ? 'OTM ' : ''
+        return `Sell ${otm}Strangle (delta ${delta})`
+      }
+      if (strategyType === 'straddle') {
+        const atm = condition.atm ? 'ATM ' : ''
+        return `${atm}Straddle`
+      }
+      if (strategyType === 'iron_condor') {
+        const width = condition.width || 500
+        return `Iron Condor (${width} pts wide)`
+      }
+      return strategyType
+    }
+
     if (condition.type === 'price_relative') {
       const reference = INDICATOR_LABELS[condition.reference] || condition.reference
       return `${indicator} ${operator}${condition.value} ${condition.unit || ''} from ${reference}`
     }
 
     if (condition.type === 'oi' || condition.operator === 'increasing' || condition.operator === 'decreasing') {
-      return `${indicator} ${operator === '\u2191' ? 'Increasing' : operator === '\u2193' ? 'Decreasing' : operator}`
+      return `${indicator} ${operator === '↑' ? 'Increasing' : operator === '↓' ? 'Decreasing' : operator}`
     }
 
     if (condition.type === 'indicator') {
