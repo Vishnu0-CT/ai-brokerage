@@ -5,15 +5,86 @@ Manages open positions, order placement, and exit functionality.
 """
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import logging
 import uuid
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from decimal import Decimal
+from enum import Enum
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.trade import Position, Trade
+
+logger = logging.getLogger(__name__)
+
+
+class OrderType(str, Enum):
+    """Valid order types."""
+    BUY = "BUY"
+    SELL = "SELL"
+
+
+# Thread-safe price cache using contextvars (request-scoped)
+_price_cache_var: ContextVar[dict[str, float]] = ContextVar("price_cache", default={})
+_price_cache_lock = asyncio.Lock()
+
+
+def _get_price_cache() -> dict[str, float]:
+    """Get the request-scoped price cache."""
+    try:
+        return _price_cache_var.get()
+    except LookupError:
+        cache: dict[str, float] = {}
+        _price_cache_var.set(cache)
+        return cache
+
+
+def _get_deterministic_price(symbol: str) -> float:
+    """
+    Get a deterministic mock price for a symbol.
+    Uses hash of symbol to seed random, ensuring consistent prices within a session.
+    Thread-safe using contextvars for request-scoped caching.
+    """
+    cache = _get_price_cache()
+    
+    if symbol in cache:
+        return cache[symbol]
+    
+    # Use symbol hash to seed random for deterministic pricing
+    symbol_hash = int(hashlib.md5(symbol.encode()).hexdigest(), 16)
+    
+    # Extract base price from symbol if it's an option
+    parts = symbol.split()
+    if len(parts) >= 2:
+        try:
+            strike = int(parts[1])
+            # Option price is typically a fraction of strike
+            # Use deterministic multiplier based on symbol hash
+            multiplier = 0.5 + (symbol_hash % 150) / 100  # Range: 0.5 to 2.0
+            base_price = strike * 0.01 * multiplier
+            price = round(base_price, 2)
+            cache[symbol] = price
+            return price
+        except ValueError:
+            pass
+    
+    # Fallback: deterministic price based on hash
+    price = round(100 + (symbol_hash % 400), 2)
+    cache[symbol] = price
+    return price
+
+
+def clear_price_cache() -> None:
+    """Clear the price cache (useful for testing or session reset)."""
+    try:
+        _price_cache_var.set({})
+    except LookupError:
+        pass
 
 
 class PositionService:
@@ -76,7 +147,7 @@ class PositionService:
         
         position_list = []
         for pos in positions:
-            # Get current price
+            # Get current price (deterministic)
             ltp = await self._get_current_price(pos.symbol)
             
             # Calculate P&L
@@ -155,7 +226,7 @@ class PositionService:
         if not position:
             return {"success": False, "error": "Position not found"}
         
-        # Get exit price
+        # Get exit price (deterministic if not provided)
         if exit_price is None:
             exit_price = Decimal(str(await self._get_current_price(position.symbol)))
         
@@ -215,27 +286,115 @@ class PositionService:
         }
     
     async def exit_all_positions(self, user_id: uuid.UUID) -> dict:
-        """Exit all open positions for a user."""
+        """
+        Exit all open positions for a user.
+        
+        Uses a single transaction to ensure atomicity - if any exit fails,
+        all changes are rolled back.
+        """
         result = await self._session.execute(
             select(Position).where(Position.user_id == user_id)
         )
         positions = result.scalars().all()
         
+        if not positions:
+            return {
+                "success": True,
+                "positions_closed": 0,
+                "total_pnl": 0,
+                "results": [],
+            }
+        
         results = []
-        total_pnl = 0
+        total_pnl = 0.0
+        trades_to_add = []
+        positions_to_delete = []
         
-        for position in positions:
-            exit_result = await self.exit_position(position.id)
-            results.append(exit_result)
-            if exit_result["success"]:
-                total_pnl += exit_result["trade"]["pnl"]
-        
-        return {
-            "success": True,
-            "positions_closed": len(results),
-            "total_pnl": round(total_pnl, 2),
-            "results": results,
-        }
+        try:
+            for position in positions:
+                # Get exit price (deterministic)
+                exit_price = Decimal(str(await self._get_current_price(position.symbol)))
+                
+                # Calculate P&L
+                if position.position_type == "BUY":
+                    pnl = (float(exit_price) - float(position.avg_price)) * position.quantity
+                else:
+                    pnl = (float(position.avg_price) - float(exit_price)) * position.quantity
+                
+                pnl_percent = (pnl / (float(position.avg_price) * position.quantity)) * 100
+                
+                # Calculate hold time
+                hold_time = datetime.now(timezone.utc) - position.created_at
+                hold_time_minutes = int(hold_time.total_seconds() / 60)
+                
+                # Create trade record
+                trade = Trade(
+                    id=uuid.uuid4(),
+                    user_id=position.user_id,
+                    date=datetime.now(timezone.utc),
+                    time=datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                    instrument=position.symbol,
+                    trade_type=position.position_type,
+                    entry_price=position.avg_price,
+                    exit_price=exit_price,
+                    quantity=position.quantity,
+                    pnl=Decimal(str(round(pnl, 2))),
+                    pnl_percent=Decimal(str(round(pnl_percent, 2))),
+                    hold_time_minutes=hold_time_minutes,
+                    strategy="Manual Trade",
+                    tags=["manual_exit", "bulk_exit"],
+                    notes="Position exited via exit_all",
+                    is_revenge_trade=False,
+                    is_overtrade=False,
+                    is_tilt_trade=False,
+                )
+                
+                trades_to_add.append(trade)
+                positions_to_delete.append(position)
+                total_pnl += pnl
+                
+                results.append({
+                    "success": True,
+                    "trade": {
+                        "id": str(trade.id),
+                        "symbol": trade.instrument,
+                        "type": trade.trade_type,
+                        "entry_price": float(trade.entry_price),
+                        "exit_price": float(trade.exit_price),
+                        "quantity": trade.quantity,
+                        "pnl": float(trade.pnl),
+                        "pnl_percent": float(trade.pnl_percent),
+                        "hold_time_minutes": trade.hold_time_minutes,
+                    },
+                })
+            
+            # Add all trades and delete all positions in a single transaction
+            for trade in trades_to_add:
+                self._session.add(trade)
+            
+            for position in positions_to_delete:
+                await self._session.delete(position)
+            
+            await self._session.commit()
+            
+            return {
+                "success": True,
+                "positions_closed": len(results),
+                "total_pnl": round(total_pnl, 2),
+                "results": results,
+            }
+            
+        except Exception as e:
+            # Rollback on any error
+            await self._session.rollback()
+            logger.error(f"Failed to exit all positions: {e}")
+            return {
+                "success": False,
+                "error": f"Failed to exit positions: {str(e)}",
+                "positions_closed": 0,
+                "total_pnl": 0,
+                "results": [],
+            }
     
     async def get_position_summary(self, user_id: uuid.UUID) -> dict:
         """Get summary of all positions."""
@@ -270,7 +429,8 @@ class PositionService:
         }
     
     async def _get_current_price(self, symbol: str) -> float:
-        """Get current price for a symbol."""
+        """Get current price for a symbol (deterministic for mock trading)."""
+        # Try to get from price service first
         if self._price_service:
             try:
                 tick = await self._price_service.get_price(symbol.split()[0])  # Get base symbol
@@ -279,18 +439,5 @@ class PositionService:
             except Exception:
                 pass
         
-        # Mock price based on symbol
-        import random
-        
-        # Extract base price from symbol if it's an option
-        parts = symbol.split()
-        if len(parts) >= 2:
-            try:
-                strike = int(parts[1])
-                # Option price is typically a fraction of strike
-                base_price = strike * 0.01 * random.uniform(0.5, 2.0)
-                return round(base_price, 2)
-            except ValueError:
-                pass
-        
-        return round(random.uniform(100, 500), 2)
+        # Fall back to deterministic mock price
+        return _get_deterministic_price(symbol)

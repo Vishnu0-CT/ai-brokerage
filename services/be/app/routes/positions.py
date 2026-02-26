@@ -6,11 +6,14 @@ API endpoints for position management, order placement, and exit functionality.
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from decimal import Decimal
+from enum import Enum
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
@@ -30,14 +33,36 @@ def get_position_service(
     return PositionService(session, price_service)
 
 
-# Request models
+# Request models with validation
 class OrderRequest(BaseModel):
-    symbol: str  # e.g., "NIFTY 26500 CE"
-    order_type: str  # "BUY" or "SELL"
-    quantity: int  # Total quantity (lots × lot_size)
-    lots: int
-    price: Decimal
-    expiry: str
+    symbol: str = Field(..., min_length=1, max_length=100, description="e.g., 'NIFTY 26500 CE'")
+    order_type: Literal["BUY", "SELL"] = Field(..., description="Order type: BUY or SELL")
+    quantity: int = Field(..., gt=0, description="Total quantity (must be positive)")
+    lots: int = Field(..., gt=0, description="Number of lots (must be positive)")
+    price: Decimal = Field(..., gt=0, description="Price per unit (must be positive)")
+    expiry: str = Field(..., min_length=1, description="Expiry date")
+    
+    @field_validator("symbol")
+    @classmethod
+    def validate_symbol(cls, v: str) -> str:
+        """Validate symbol format."""
+        v = v.strip().upper()
+        if not v:
+            raise ValueError("Symbol cannot be empty")
+        # Basic format check: should contain letters and optionally numbers/spaces
+        if not re.match(r'^[A-Z][A-Z0-9\s]+$', v):
+            raise ValueError("Invalid symbol format")
+        return v
+    
+    @field_validator("expiry")
+    @classmethod
+    def validate_expiry(cls, v: str) -> str:
+        """Validate expiry date format."""
+        v = v.strip()
+        # Accept YYYY-MM-DD format
+        if not re.match(r'^\d{4}-\d{2}-\d{2}$', v):
+            raise ValueError("Expiry must be in YYYY-MM-DD format")
+        return v
 
 
 class ExitPositionRequest(BaseModel):

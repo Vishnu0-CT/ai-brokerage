@@ -119,16 +119,32 @@ STRIKE_INTERVALS = {
 }
 
 
+import hashlib
+
+
+def _get_deterministic_noise(symbol: str, strike: int, is_call: bool) -> float:
+    """
+    Get deterministic noise factor based on symbol, strike, and option type.
+    Returns a value between 0.95 and 1.05 for consistent pricing.
+    """
+    key = f"{symbol}_{strike}_{'CE' if is_call else 'PE'}"
+    hash_val = int(hashlib.md5(key.encode()).hexdigest(), 16)
+    # Map to range 0.95 to 1.05
+    return 0.95 + (hash_val % 100) / 1000
+
+
 def _calculate_option_price(
     spot: float,
     strike: int,
     is_call: bool,
     days_to_expiry: int,
     iv: float = 0.15,
+    symbol: str = "",
 ) -> float:
     """
     Calculate option price using simplified Black-Scholes approximation.
     This is a mock implementation for realistic-looking prices.
+    Uses deterministic noise for consistent pricing across calls.
     """
     # Intrinsic value
     if is_call:
@@ -144,22 +160,27 @@ def _calculate_option_price(
     atm_factor = math.exp(-moneyness * 10)
     time_value = spot * iv * time_factor * atm_factor * 0.4
     
-    # Add some randomness for realism
-    noise = random.uniform(0.95, 1.05)
+    # Use deterministic noise for consistent pricing
+    noise = _get_deterministic_noise(symbol, strike, is_call)
     
     price = (intrinsic + time_value) * noise
     return max(0.05, round(price, 2))
 
 
-def _calculate_iv(spot: float, strike: int, is_call: bool) -> float:
-    """Calculate implied volatility (mock)."""
+def _calculate_iv(spot: float, strike: int, is_call: bool, symbol: str = "") -> float:
+    """Calculate implied volatility (mock) with deterministic variation."""
     moneyness = abs(spot - strike) / spot
     
     # IV smile - higher IV for OTM options
     base_iv = 0.15
     smile_factor = 1 + moneyness * 2
     
-    iv = base_iv * smile_factor * random.uniform(0.9, 1.1)
+    # Use deterministic variation instead of random
+    noise = _get_deterministic_noise(symbol, strike, is_call)
+    # Map noise from 0.95-1.05 to 0.9-1.1
+    iv_noise = 0.9 + (noise - 0.95) * 2
+    
+    iv = base_iv * smile_factor * iv_noise
     return round(iv * 100, 2)  # Return as percentage
 
 
@@ -191,19 +212,23 @@ def generate_option_chain(
     option_chain = []
     
     for strike in strikes:
-        # Calculate call data
-        call_price = _calculate_option_price(spot_price, strike, True, days_to_expiry)
-        call_iv = _calculate_iv(spot_price, strike, True)
-        call_oi = random.randint(10000, 500000)
-        call_volume = random.randint(1000, 50000)
-        call_change = random.uniform(-10, 10)
+        # Calculate call data with deterministic pricing
+        call_price = _calculate_option_price(spot_price, strike, True, days_to_expiry, symbol=symbol)
+        call_iv = _calculate_iv(spot_price, strike, True, symbol=symbol)
+        # Use deterministic OI/volume based on strike and symbol
+        call_hash = int(hashlib.md5(f"{symbol}_{strike}_CE".encode()).hexdigest(), 16)
+        call_oi = 10000 + (call_hash % 490000)
+        call_volume = 1000 + (call_hash % 49000)
+        call_change = -10 + (call_hash % 2000) / 100  # Range: -10 to 10
         
-        # Calculate put data
-        put_price = _calculate_option_price(spot_price, strike, False, days_to_expiry)
-        put_iv = _calculate_iv(spot_price, strike, False)
-        put_oi = random.randint(10000, 500000)
-        put_volume = random.randint(1000, 50000)
-        put_change = random.uniform(-10, 10)
+        # Calculate put data with deterministic pricing
+        put_price = _calculate_option_price(spot_price, strike, False, days_to_expiry, symbol=symbol)
+        put_iv = _calculate_iv(spot_price, strike, False, symbol=symbol)
+        # Use deterministic OI/volume based on strike and symbol
+        put_hash = int(hashlib.md5(f"{symbol}_{strike}_PE".encode()).hexdigest(), 16)
+        put_oi = 10000 + (put_hash % 490000)
+        put_volume = 1000 + (put_hash % 49000)
+        put_change = -10 + (put_hash % 2000) / 100  # Range: -10 to 10
         
         # Bid-ask spread (tighter for ATM)
         moneyness = abs(spot_price - strike) / spot_price
