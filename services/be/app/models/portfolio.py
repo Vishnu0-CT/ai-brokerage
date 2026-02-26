@@ -21,6 +21,7 @@ class Holding(Base):
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
     symbol: Mapped[str] = mapped_column(String, nullable=False)
+    side: Mapped[str] = mapped_column(String, nullable=False, server_default="long")
     quantity: Mapped[Decimal] = mapped_column(Numeric, nullable=False)
     avg_price: Mapped[Decimal] = mapped_column(Numeric, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(

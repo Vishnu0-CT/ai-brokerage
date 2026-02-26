@@ -44,31 +44,42 @@ class OrderService:
         )
         config = cfg_result.scalar_one()
 
-        buying_power_info: dict | None = None
-        if self._margin:
-            buying_power_info = await self._margin.get_buying_power(user_id)
-            if buying_power_info["buying_power"] < float(cost):
-                raise InsufficientFundsError(float(cost), buying_power_info["buying_power"])
-        elif config.current_cash < cost:
-            raise InsufficientFundsError(float(cost), float(config.current_cash))
-
-        config.current_cash -= cost
-
         h_result = await self._session.execute(
             select(Holding).where(Holding.user_id == user_id, Holding.symbol == symbol)
         )
         holding = h_result.scalar_one_or_none()
 
-        if holding is None:
-            holding = Holding(
-                user_id=user_id, symbol=symbol,
-                quantity=quantity, avg_price=price,
-            )
-            self._session.add(holding)
+        buying_power_info: dict | None = None
+
+        if holding and holding.side == "short":
+            # Closing/reducing a short — pay to buy back
+            if quantity > holding.quantity:
+                raise InsufficientHoldingsError(symbol, float(quantity), float(holding.quantity))
+            config.current_cash -= cost
+            holding.quantity -= quantity
+            if holding.quantity == 0:
+                await self._session.delete(holding)
         else:
-            total_cost = holding.avg_price * holding.quantity + price * quantity
-            holding.quantity += quantity
-            holding.avg_price = total_cost / holding.quantity
+            # Opening/adding to a long — spend cash
+            if self._margin:
+                buying_power_info = await self._margin.get_buying_power(user_id)
+                if buying_power_info["buying_power"] < float(cost):
+                    raise InsufficientFundsError(float(cost), buying_power_info["buying_power"])
+            elif config.current_cash < cost:
+                raise InsufficientFundsError(float(cost), float(config.current_cash))
+
+            config.current_cash -= cost
+
+            if holding is None:
+                holding = Holding(
+                    user_id=user_id, symbol=symbol, side="long",
+                    quantity=quantity, avg_price=price,
+                )
+                self._session.add(holding)
+            else:
+                total_cost = holding.avg_price * holding.quantity + price * quantity
+                holding.quantity += quantity
+                holding.avg_price = total_cost / holding.quantity
 
         txn = Transaction(
             user_id=user_id, symbol=symbol, side="buy",
@@ -90,26 +101,40 @@ class OrderService:
         self, user_id: uuid.UUID, symbol: str,
         quantity: Decimal, price: Decimal, triggered_by: uuid.UUID | None,
     ) -> dict:
+        cfg_result = await self._session.execute(
+            select(PortfolioConfig).where(PortfolioConfig.user_id == user_id)
+        )
+        config = cfg_result.scalar_one()
+
         h_result = await self._session.execute(
             select(Holding).where(Holding.user_id == user_id, Holding.symbol == symbol)
         )
         holding = h_result.scalar_one_or_none()
 
-        if holding is None or holding.quantity < quantity:
-            available = float(holding.quantity) if holding else 0
-            raise InsufficientHoldingsError(symbol, float(quantity), available)
-
         proceeds = quantity * price
 
-        holding.quantity -= quantity
-        if holding.quantity == 0:
-            await self._session.delete(holding)
+        if holding and holding.side == "long":
+            # Closing/reducing a long
+            if quantity > holding.quantity:
+                raise InsufficientHoldingsError(symbol, float(quantity), float(holding.quantity))
+            config.current_cash += proceeds
+            holding.quantity -= quantity
+            if holding.quantity == 0:
+                await self._session.delete(holding)
+        else:
+            # Opening/adding to a short — receive sell proceeds
+            config.current_cash += proceeds
 
-        cfg_result = await self._session.execute(
-            select(PortfolioConfig).where(PortfolioConfig.user_id == user_id)
-        )
-        config = cfg_result.scalar_one()
-        config.current_cash += proceeds
+            if holding is None:
+                holding = Holding(
+                    user_id=user_id, symbol=symbol, side="short",
+                    quantity=quantity, avg_price=price,
+                )
+                self._session.add(holding)
+            else:
+                total_cost = holding.avg_price * holding.quantity + price * quantity
+                holding.quantity += quantity
+                holding.avg_price = total_cost / holding.quantity
 
         txn = Transaction(
             user_id=user_id, symbol=symbol, side="sell",

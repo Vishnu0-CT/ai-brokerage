@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
@@ -19,6 +19,16 @@ from app.services.order import OrderService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
+
+
+async def _run_alert_detection_background(session_factory, price_service):
+    try:
+        async with session_factory() as session:
+            analytics_svc = AnalyticsService(session, price_service)
+            alert_svc = AlertDetectorService(session, analytics_svc)
+            await alert_svc.evaluate_all(DEFAULT_USER_ID)
+    except Exception:
+        logger.warning("Background alert detection failed", exc_info=True)
 
 
 def get_order_service(
@@ -53,6 +63,7 @@ async def get_transactions(
 async def place_order(
     body: OrderCreate,
     request: Request,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
 ):
     margin_svc = MarginService(session)
@@ -65,13 +76,11 @@ async def place_order(
         price=body.price,
     )
 
-    # Trigger alert detection after order placement
-    try:
-        analytics_svc = AnalyticsService(session, request.app.state.price_service)
-        alert_svc = AlertDetectorService(session, analytics_svc)
-        await alert_svc.evaluate_all(DEFAULT_USER_ID)
-    except Exception:
-        logger.warning("Alert detection after order failed", exc_info=True)
+    background_tasks.add_task(
+        _run_alert_detection_background,
+        request.app.state.session_factory,
+        request.app.state.price_service,
+    )
 
     return result
 

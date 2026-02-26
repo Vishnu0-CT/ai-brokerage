@@ -154,55 +154,6 @@ def _format_behavioural_context(ctx: PromptContext) -> str:
     return "\n\n".join(parts)
 
 
-def _format_coaching_context(ctx: PromptContext) -> str:
-    """Format coaching insights for the system prompt."""
-    coaching = ctx.coaching_insights
-    if not coaching:
-        return ""
-
-    parts = ["Historical coaching data:"]
-
-    win_by_time = coaching.get("win_rate_by_time", {})
-    if win_by_time:
-        morning = win_by_time.get("morning", {})
-        afternoon = win_by_time.get("afternoon", {})
-        if morning or afternoon:
-            parts.append(
-                f"- Win rate before 10:30 AM: {morning.get('win_rate', 0):.0f}% "
-                f"({morning.get('trades', 0)} trades) | "
-                f"After 1 PM: {afternoon.get('win_rate', 0):.0f}% "
-                f"({afternoon.get('trades', 0)} trades)"
-            )
-
-    best = coaching.get("best_setup", {})
-    if best:
-        avg_pnl = best.get("avg_pnl", 0)
-        parts.append(
-            f"- Best setup: {best.get('instrument', 'N/A')} "
-            f"({'+'if avg_pnl >= 0 else ''}₹{avg_pnl:,.0f}/trade)"
-        )
-
-    worst = coaching.get("worst_setup", {})
-    if worst:
-        avg_pnl = worst.get("avg_pnl", 0)
-        cost = worst.get("total_cost", 0)
-        parts.append(
-            f"- Worst setup: {worst.get('instrument', 'N/A')} "
-            f"(₹{avg_pnl:,.0f}/trade, {worst.get('win_rate', 0):.0f}% win rate)"
-        )
-        if cost:
-            parts.append(f"- This pattern has cost the trader ₹{abs(cost):,.0f} this month")
-
-    hold_time = coaching.get("hold_time", {})
-    if hold_time:
-        parts.append(
-            f"- Avg hold time: winners {hold_time.get('winners', '?')} min, "
-            f"losers {hold_time.get('losers', '?')} min"
-        )
-
-    return "\n".join(parts) if len(parts) > 1 else ""
-
-
 def _format_wellbeing_context(ctx: PromptContext) -> str:
     """Format wellbeing assessment for the system prompt."""
     wb = ctx.wellbeing
@@ -233,7 +184,6 @@ async def build_system_prompt(
     sections = [
         _format_portfolio_context(ctx),
         _format_behavioural_context(ctx),
-        _format_coaching_context(ctx),
         _format_wellbeing_context(ctx),
     ]
 

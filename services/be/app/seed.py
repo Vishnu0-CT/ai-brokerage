@@ -49,11 +49,11 @@ async def seed_portfolio_config(user_id: uuid.UUID) -> None:
 
 # Indian F&O demo holdings (from tradeai mockPortfolio)
 DEMO_HOLDINGS = [
-    {"symbol": "NIFTY", "quantity": Decimal("300"), "avg_price": Decimal("26200.00")},      # 6 lots x 50
-    {"symbol": "BANKNIFTY", "quantity": Decimal("125"), "avg_price": Decimal("57600.00")},   # 5 lots x 25
-    {"symbol": "RELIANCE", "quantity": Decimal("100"), "avg_price": Decimal("1280.00")},
-    {"symbol": "INFY", "quantity": Decimal("200"), "avg_price": Decimal("1550.00")},
-    {"symbol": "TCS", "quantity": Decimal("50"), "avg_price": Decimal("3800.00")},
+    {"symbol": "NIFTY", "side": "long", "quantity": Decimal("300"), "avg_price": Decimal("26200.00")},
+    {"symbol": "BANKNIFTY", "side": "short", "quantity": Decimal("75"), "avg_price": Decimal("58200.00")},
+    {"symbol": "RELIANCE", "side": "long", "quantity": Decimal("100"), "avg_price": Decimal("1280.00")},
+    {"symbol": "INFY", "side": "long", "quantity": Decimal("200"), "avg_price": Decimal("1550.00")},
+    {"symbol": "TCS", "side": "long", "quantity": Decimal("50"), "avg_price": Decimal("3800.00")},
 ]
 
 # Time-of-day trading patterns (from tradeai mockTradeHistory)
@@ -111,7 +111,7 @@ async def seed_demo_data(user_id: uuid.UUID) -> None:
             txn = Transaction(
                 user_id=user_id,
                 symbol=h["symbol"],
-                side="buy",
+                side="sell" if h["side"] == "short" else "buy",
                 quantity=h["quantity"],
                 price=h["avg_price"],
             )
