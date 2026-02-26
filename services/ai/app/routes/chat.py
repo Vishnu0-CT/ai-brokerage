@@ -36,8 +36,9 @@ async def websocket_chat(websocket: WebSocket, conversation_id: uuid.UUID):
                         websocket.send_json({"type": "tool_activity", **info})
                     )
 
-                result = await chat_svc.process_message(
-                    conv_id, user_message, on_tool_activity=on_tool_activity,
+                result = await chat_svc.process_message_streaming(
+                    conv_id, user_message,
+                    on_tool_activity=on_tool_activity,
                 )
 
                 await websocket.send_json({
@@ -50,4 +51,11 @@ async def websocket_chat(websocket: WebSocket, conversation_id: uuid.UUID):
         logger.info(f"WebSocket disconnected: {conversation_id}")
     except Exception:
         logger.exception(f"WebSocket error: {conversation_id}")
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "message": "Something went wrong. Please try again.",
+            })
+        except Exception:
+            pass
         await websocket.close()

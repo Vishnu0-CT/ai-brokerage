@@ -125,3 +125,17 @@ body {
   color: #F1F5F9 !important;
   font-family: 'IBM Plex Mono', monospace !important;
 }
+
+/* Toast notification progress bar animation */
+@keyframes progress-bar {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-progress-bar {
+  animation: progress-bar 5s linear forwards;
+}

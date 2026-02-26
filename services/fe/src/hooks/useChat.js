@@ -10,7 +10,7 @@ import { useWebSocket } from './useWebSocket'
  * 4. Handle { type: "response" } and { type: "tool_activity" } from WS
  * 5. Save messages to BE for persistence
  */
-export function useChat(conversationTitle = 'Chat') {
+export function useChat(conversationTitle = 'Chat', externalConversationId = null) {
   const [conversationId, setConversationId] = useState(null)
   const [messages, setMessages] = useState([])
   const [isLoading, setIsLoading] = useState(false)
@@ -18,8 +18,21 @@ export function useChat(conversationTitle = 'Chat') {
   const [error, setError] = useState(null)
   const pendingRef = useRef(false)
 
-  // Initialize conversation
+  // Sync external conversation ID when provided
   useEffect(() => {
+    if (externalConversationId !== null) {
+      setConversationId(externalConversationId)
+      setMessages([])
+      setToolActivity(null)
+      setIsLoading(false)
+      setError(null)
+      pendingRef.current = false
+    }
+  }, [externalConversationId])
+
+  // Initialize conversation (only when not externally managed)
+  useEffect(() => {
+    if (externalConversationId !== null) return
     let cancelled = false
 
     async function init() {
@@ -37,13 +50,72 @@ export function useChat(conversationTitle = 'Chat') {
 
     init()
     return () => { cancelled = true }
-  }, [conversationTitle])
+  }, [conversationTitle, externalConversationId])
+
+  const streamingMessageRef = useRef(null)
 
   // Handle incoming WS messages
   const handleWsMessage = useCallback((msg) => {
     if (msg.type === 'tool_activity') {
       setToolActivity(msg)
+    } else if (msg.type === 'response_chunk') {
+      // Streaming chunk received - update message in real-time
+      setMessages(prev => {
+        const lastMsg = prev[prev.length - 1]
+        
+        if (lastMsg && lastMsg.role === 'assistant' && lastMsg.isStreaming) {
+          // Update existing streaming message
+          return [
+            ...prev.slice(0, -1),
+            {
+              ...lastMsg,
+              content: lastMsg.content + msg.content,
+            }
+          ]
+        } else {
+          // Create new streaming message
+          const newMsg = {
+            id: `msg_${Date.now()}`,
+            role: 'assistant',
+            content: msg.content,
+            isStreaming: true,
+            timestamp: new Date().toISOString(),
+          }
+          streamingMessageRef.current = newMsg.id
+          return [...prev, newMsg]
+        }
+      })
+    } else if (msg.type === 'response_complete') {
+      // Streaming complete - finalize message
+      setToolActivity(null)
+      pendingRef.current = false
+      setIsLoading(false)
+
+      setMessages(prev => {
+        const lastMsg = prev[prev.length - 1]
+        if (lastMsg && lastMsg.role === 'assistant' && lastMsg.isStreaming) {
+          const finalMsg = {
+            ...lastMsg,
+            isStreaming: false,
+            content: msg.detail || lastMsg.content,
+          }
+          
+          // Persist final message to BE
+          if (conversationId) {
+            saveMessage(conversationId, {
+              role: 'assistant',
+              content: finalMsg.content,
+            }).catch(() => {})
+          }
+          
+          return [...prev.slice(0, -1), finalMsg]
+        }
+        return prev
+      })
+
+      streamingMessageRef.current = null
     } else if (msg.type === 'response') {
+      // Fallback for non-streaming responses
       setToolActivity(null)
       pendingRef.current = false
       setIsLoading(false)
@@ -64,6 +136,11 @@ export function useChat(conversationTitle = 'Chat') {
           content: assistantMessage.content,
         }).catch(() => {})
       }
+    } else if (msg.type === 'error') {
+      setToolActivity(null)
+      pendingRef.current = false
+      setIsLoading(false)
+      setError(msg.message || 'An error occurred')
     }
   }, [conversationId])
 
@@ -104,6 +181,16 @@ export function useChat(conversationTitle = 'Chat') {
     setError(null)
     setToolActivity(null)
   }, [])
+
+  // Safety net: reset loading state on ungraceful disconnect
+  useEffect(() => {
+    if (!connected && pendingRef.current) {
+      pendingRef.current = false
+      setIsLoading(false)
+      setToolActivity(null)
+      setError('Connection lost. Reconnecting...')
+    }
+  }, [connected])
 
   // Load existing messages if conversation has history
   useEffect(() => {
