@@ -33,6 +33,7 @@ class PortfolioService:
             "invested_value": round(invested_value, 2),
             "total_value": round(total_value, 2),
             "total_pnl": round(total_pnl, 2),
+            "daily_loss_limit": config.daily_loss_limit,
         }
 
     async def get_holdings(self, user_id: uuid.UUID) -> list[dict]:
@@ -56,6 +57,7 @@ class PortfolioService:
             pnl_pct = (unrealized / (avg * qty)) * 100 if avg * qty else 0
 
             enriched.append({
+                "id": str(h.id),
                 "symbol": h.symbol,
                 "side": h.side,
                 "quantity": h.quantity,
@@ -65,6 +67,9 @@ class PortfolioService:
                 "realized_pnl": None,
                 "pnl": round(unrealized, 2),
                 "pnl_pct": round(pnl_pct, 2),
+                "lots": h.lots,
+                "expiry": h.expiry,
+                "created_at": h.created_at.isoformat() if h.created_at else None,
             })
 
         return enriched

@@ -32,3 +32,12 @@ class PriceUnavailableError(Exception):
     def __init__(self, symbol: str):
         self.symbol = symbol
         super().__init__(f"Price unavailable for: {symbol}")
+
+
+class DailyLossLimitBreachedError(Exception):
+    def __init__(self, current_loss: float, limit: float):
+        self.current_loss = current_loss
+        self.limit = limit
+        super().__init__(
+            f"Daily loss limit breached: current loss ₹{current_loss:,.0f} exceeds limit ₹{limit:,.0f}. Trading halted for today."
+        )

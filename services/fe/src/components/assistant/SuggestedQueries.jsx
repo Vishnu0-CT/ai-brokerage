@@ -1,10 +1,10 @@
 const suggestions = [
-  { text: "What's my biggest risk right now?", icon: '\u26a0\ufe0f' },
-  { text: "Show me my P&L breakdown", icon: '\ud83d\udcca' },
-  { text: "What if Nifty falls 200 points?", icon: '\ud83d\udcc9' },
-  { text: "How much margin will I free up if I exit HDFC PE?", icon: '\ud83d\udcb0' },
-  { text: "What's my net delta exposure?", icon: '\ud83d\udcc8' },
-  { text: "Show me my worst performing position", icon: '\ud83d\udd34' },
+  { text: "What's my biggest risk right now?", icon: '⚠️' },
+  { text: "Show me my P&L breakdown", icon: '📊' },
+  { text: "What if Nifty falls 200 points?", icon: '📉' },
+  { text: "How much margin will I free up if I exit HDFC PE?", icon: '💰' },
+  { text: "What's my net delta exposure?", icon: '📈' },
+  { text: "Show me my worst performing position", icon: '🔴' },
 ]
 
 export default function SuggestedQueries({ onSelect, disabled }) {

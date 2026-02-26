@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.alert import Alert
 from app.models.order import Transaction
 from app.models.portfolio import Holding, PortfolioConfig
+from app.services.margin import MarginService
 from app.utils.formatters import format_inr
 
 logger = logging.getLogger(__name__)
@@ -35,27 +36,29 @@ class AlertDetectorService:
         if len(classified) < 4:
             return None
 
-        # Chronological order
-        sorted_trades = list(reversed(classified))
-
-        for i in range(len(sorted_trades) - 3):
-            t = sorted_trades[i]
+        for i in range(len(classified) - 3):
+            t = classified[i]
             trade_pnl = (float(t["price"]) - t["avg_buy_price"]) * float(t["quantity"])
 
             if trade_pnl < -loss_threshold:
                 trigger_time = datetime.fromisoformat(t["created_at"])
-                next_trades = sorted_trades[i + 1: i + 5]
+                next_trades = classified[i + 1: i + 5]
 
                 if len(next_trades) >= 3:
                     last_time = datetime.fromisoformat(next_trades[-1]["created_at"])
                     window_mins = (last_time - trigger_time).total_seconds() / 60
 
-                    if window_mins < 30:
+                    if 0 < window_mins <= 30:
                         revenge_pnl = sum(
                             (float(nt["price"]) - nt["avg_buy_price"]) * float(nt["quantity"])
                             for nt in next_trades
                         )
                         avg_revenge_pnl = revenge_pnl / len(next_trades)
+
+                        if avg_revenge_pnl >= 0:
+                            advice = "Even profitable revenge trades carry elevated risk. Consider taking a 15-minute break after significant losses."
+                        else:
+                            advice = "Consider taking a 15-minute break after significant losses."
 
                         return {
                             "type": "REVENGE_TRADING",
@@ -76,7 +79,7 @@ class AlertDetectorService:
                             "suggestion": (
                                 f"Your average P&L on trades in this pattern is "
                                 f"{format_inr(avg_revenge_pnl, show_sign=True)} each. "
-                                f"Consider taking a 15-minute break after significant losses."
+                                f"{advice}"
                             ),
                         }
         return None
@@ -344,6 +347,15 @@ class AlertDetectorService:
 
     async def evaluate_all(self, user_id: uuid.UUID) -> list[dict]:
         """Run all detectors, persist new alerts, return active alerts."""
+        # Dedup: fetch existing undismissed alert types for this user
+        existing_result = await self._session.execute(
+            select(Alert.type).where(
+                Alert.user_id == user_id,
+                Alert.dismissed == False,  # noqa: E712
+            )
+        )
+        existing_types: set[str] = {row[0] for row in existing_result.all()}
+
         detectors = [
             self.detect_revenge_trade,
             self.detect_overtrading,
@@ -358,7 +370,7 @@ class AlertDetectorService:
         for detector in detectors:
             try:
                 result = await detector(user_id)
-                if result is not None:
+                if result is not None and result["type"] not in existing_types:
                     alert = Alert(
                         user_id=user_id,
                         type=result["type"],
@@ -370,6 +382,7 @@ class AlertDetectorService:
                     )
                     self._session.add(alert)
                     new_alerts.append(result)
+                    existing_types.add(result["type"])
             except Exception:
                 logger.exception(f"Alert detector failed: {detector.__name__}")
 
@@ -391,7 +404,7 @@ class AlertDetectorService:
             if datetime.fromisoformat(t["created_at"]) >= session_start
         ]
 
-        # Drawdown
+        # Drawdown (today only)
         running_pnl = 0.0
         max_pnl = 0.0
         max_drawdown = 0.0
@@ -404,11 +417,25 @@ class AlertDetectorService:
             if drawdown > max_drawdown:
                 max_drawdown = drawdown
 
+        # Drawdown (overall — across all classified trades)
+        overall_running = 0.0
+        overall_peak = 0.0
+        overall_max_dd = 0.0
+        for t in classified:
+            trade_pnl = (float(t["price"]) - t["avg_buy_price"]) * float(t["quantity"])
+            overall_running += trade_pnl
+            if overall_running > overall_peak:
+                overall_peak = overall_running
+            dd = overall_peak - overall_running
+            if dd > overall_max_dd:
+                overall_max_dd = dd
         config_result = await self._session.execute(
             select(PortfolioConfig).where(PortfolioConfig.user_id == user_id)
         )
         config = config_result.scalar_one_or_none()
         daily_limit = float(config.daily_loss_limit) if config else 25000
+        initial_cash = float(config.initial_cash) if config else 0
+        overall_dd_pct = (overall_max_dd / initial_cash * 100) if initial_cash > 0 else 0
 
         # Trade velocity
         week_start = session_start - timedelta(days=7)
@@ -429,6 +456,20 @@ class AlertDetectorService:
         exposure = await self._analytics.calculate_exposure(user_id)
         max_concentration = max((e["allocation_pct"] for e in exposure), default=0)
 
+        # Margin utilization
+        holdings_result = await self._session.execute(
+            select(Holding).where(Holding.user_id == user_id)
+        )
+        holdings = holdings_result.scalars().all()
+        invested_value = sum(float(h.avg_price) * float(h.quantity) for h in holdings)
+
+        try:
+            margin_svc = MarginService(self._session)
+            bp = await margin_svc.get_buying_power(user_id)
+            margin_total = bp["buying_power"]
+        except Exception:
+            margin_total = invested_value
+
         # Win rate
         today_wins = sum(1 for t in today_trades if t["is_win"])
         today_win_rate = (today_wins / len(today_trades) * 100) if today_trades else 0
@@ -447,6 +488,11 @@ class AlertDetectorService:
                 "current": round(max_drawdown, 2),
                 "percent": round((max_drawdown / daily_limit) * 100, 1) if daily_limit > 0 else 0,
             },
+            "overall_drawdown": {
+                "current": round(overall_max_dd, 2),
+                "percent": round(overall_dd_pct, 1),
+            },
+            "daily_loss_limit": daily_limit,
             "trade_velocity": {
                 "count": len(today_trades),
                 "percent": round(trade_velocity, 1),
@@ -454,6 +500,10 @@ class AlertDetectorService:
             },
             "concentration": {
                 "percent": round(max_concentration, 1),
+            },
+            "margin": {
+                "used": round(invested_value, 2),
+                "total": round(margin_total, 2),
             },
             "today_stats": {
                 "trades": len(today_trades),

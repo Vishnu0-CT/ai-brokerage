@@ -28,6 +28,10 @@ class ToolDispatcher:
 
     # --- Market Data ---
 
+    async def _handle_search_tickers(self, params: dict) -> dict:
+        results = await self.be.search_tickers(params["query"])
+        return {"results": results, "count": len(results)}
+
     async def _handle_get_price(self, params: dict) -> dict:
         return await self.be.get_price(params["symbol"])
 

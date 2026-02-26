@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from app.services.exceptions import (
     ConditionNotFoundError,
+    DailyLossLimitBreachedError,
     InsufficientFundsError,
     InsufficientHoldingsError,
     PriceUnavailableError,
@@ -28,6 +29,10 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(ConditionNotFoundError)
     async def condition_not_found(request: Request, exc: ConditionNotFoundError):
         return JSONResponse(status_code=404, content={"error": str(exc)})
+
+    @app.exception_handler(DailyLossLimitBreachedError)
+    async def daily_loss_limit_breached(request: Request, exc: DailyLossLimitBreachedError):
+        return JSONResponse(status_code=403, content={"error": str(exc)})
 
     @app.exception_handler(PriceUnavailableError)
     async def price_unavailable(request: Request, exc: PriceUnavailableError):

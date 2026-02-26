@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { useApi } from '../../hooks/useApi'
-import { getPositions, exitPosition } from '../../api/positions'
+import { getHoldings } from '../../api/portfolio'
+import { exitPosition } from '../../api/positions'
 import { formatINR, formatPercent, getPnlColor } from '../../utils/formatters'
 import Card, { CardHeader } from '../common/Card'
 import { TableSkeleton } from '../common/Skeleton'
 import ErrorMessage from '../common/ErrorMessage'
 
 export default function PositionsTable() {
-  const { data: positions, loading, error, refetch } = useApi(() => getPositions(), [])
+  const { data: positions, loading, error, refetch } = useApi(() => getHoldings(), [])
   const [exitingPosition, setExitingPosition] = useState(null)
   const [showExitModal, setShowExitModal] = useState(false)
   const [exitSuccess, setExitSuccess] = useState(null)
@@ -99,8 +100,10 @@ export default function PositionsTable() {
             <tbody>
               {positionList.map((position) => {
                 const pnlColor = getPnlColor(position.unrealized_pnl)
-                const sideColor = position.side === 'BUY' ? 'text-positive' : 'text-negative'
-                const sideBg = position.side === 'BUY' ? 'bg-positive/10' : 'bg-negative/10'
+                const isLong = position.side === 'BUY' || position.side === 'long'
+                const sideColor = isLong ? 'text-positive' : 'text-negative'
+                const sideBg = isLong ? 'bg-positive/10' : 'bg-negative/10'
+                const sideLabel = isLong ? 'LONG' : 'SHORT'
 
                 return (
                   <tr key={position.id} className="border-b border-navy-700/50 hover:bg-navy-700/30 transition-colors">
@@ -112,7 +115,7 @@ export default function PositionsTable() {
                     </td>
                     <td className="px-3 py-3">
                       <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${sideColor} ${sideBg}`}>
-                        {position.side}
+                        {sideLabel}
                       </span>
                     </td>
                     <td className="px-3 py-3 text-right font-mono text-slate-300">

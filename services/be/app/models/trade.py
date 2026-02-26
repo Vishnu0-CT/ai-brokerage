@@ -47,30 +47,3 @@ class Trade(Base):
         Index("ix_trades_user_date", "user_id", "date"),
         Index("ix_trades_user_strategy", "user_id", "strategy"),
     )
-
-
-class Position(Base):
-    """Represents an open position (not yet exited)."""
-    __tablename__ = "positions"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
-    )
-    symbol: Mapped[str] = mapped_column(String, nullable=False)  # e.g., "NIFTY 26500 CE"
-    position_type: Mapped[str] = mapped_column(String, nullable=False)  # "BUY" or "SELL"
-    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
-    lots: Mapped[int] = mapped_column(Integer, nullable=False)
-    avg_price: Mapped[Decimal] = mapped_column(Numeric, nullable=False)
-    expiry: Mapped[str] = mapped_column(String, nullable=False)  # e.g., "2026-02-27"
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        server_default=text("now()"),
-    )
-
-    __table_args__ = (
-        Index("ix_positions_user", "user_id"),
-    )

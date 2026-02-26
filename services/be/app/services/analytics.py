@@ -642,28 +642,100 @@ class AnalyticsService:
         classified = await self.classify_trades(user_id)
         classified = self._filter_by_period(classified, period)
         total = len(classified)
-        wins = sum(1 for t in classified if t["is_win"])
-        total_pnl = sum(
-            (float(t["price"]) - t["avg_buy_price"]) * float(t["quantity"])
-            for t in classified
-        )
+
+        win_pnls: list[float] = []
+        loss_pnls: list[float] = []
+        for t in classified:
+            pnl = (float(t["price"]) - t["avg_buy_price"]) * float(t["quantity"])
+            (win_pnls if t["is_win"] else loss_pnls).append(pnl)
+
+        total_pnl = sum(win_pnls) + sum(loss_pnls)
+        avg_win = sum(win_pnls) / len(win_pnls) if win_pnls else 0
+        avg_loss = sum(loss_pnls) / len(loss_pnls) if loss_pnls else 0
+        gross_loss = abs(sum(loss_pnls))
+        profit_factor = sum(win_pnls) / gross_loss if gross_loss > 0 else 0
+
+        # Insights from best/worst setups and time analysis
+        insights: list[dict] = []
+        if best_worst["best"]:
+            b = best_worst["best"]
+            insights.append({
+                "id": "best_setup",
+                "type": "positive",
+                "title": f"Best instrument: {b['instrument']}",
+                "description": (
+                    f"Avg P&L of ₹{b['avg_pnl']:,.0f} across "
+                    f"{b['trades']} trades with {b['win_rate']:.0f}% win rate."
+                ),
+            })
+        if best_worst["worst"] and best_worst["worst"] != best_worst["best"]:
+            w = best_worst["worst"]
+            insights.append({
+                "id": "worst_setup",
+                "type": "negative",
+                "title": f"Weakest instrument: {w['instrument']}",
+                "description": (
+                    f"Avg P&L of ₹{w['avg_pnl']:,.0f} across "
+                    f"{w['trades']} trades with {w['win_rate']:.0f}% win rate."
+                ),
+            })
+        if win_rate_by_time:
+            best_time = max(
+                win_rate_by_time.items(),
+                key=lambda x: x[1].get("win_rate", 0),
+            )
+            if best_time[1].get("trades", 0) > 0:
+                insights.append({
+                    "id": "best_time",
+                    "type": "positive",
+                    "title": f"Best time: {best_time[0].capitalize()}",
+                    "description": (
+                        f"{best_time[1]['win_rate']:.0f}% win rate "
+                        f"across {best_time[1]['trades']} trades."
+                    ),
+                })
+
+        # Reshape hold_time → hold_time_analysis
+        def _fmt_mins(m: float) -> str:
+            if m < 60:
+                return f"{round(m)} min"
+            return f"{m / 60:.1f} hr"
+
+        avg_winner_hold = hold_time.get("winning", 0)
+        avg_loser_hold = hold_time.get("losing", 0)
+        hold_time_analysis = {
+            "avg_winner_hold": _fmt_mins(avg_winner_hold),
+            "avg_loser_hold": _fmt_mins(avg_loser_hold),
+            "optimal_hold": _fmt_mins(avg_winner_hold),
+            "efficiency": round(
+                min(avg_loser_hold, avg_winner_hold) / max(avg_loser_hold, avg_winner_hold), 2
+            ) if avg_winner_hold > 0 and avg_loser_hold > 0 else 0,
+            "insight": (
+                f"You hold winners for {_fmt_mins(avg_winner_hold)} and "
+                f"losers for {_fmt_mins(avg_loser_hold)} on average."
+            ) if avg_winner_hold > 0 or avg_loser_hold > 0 else None,
+        }
 
         return {
-            "overall": {
+            "summary": {
                 "total_trades": total,
-                "wins": wins,
-                "losses": total - wins,
-                "win_rate": round(wins / total * 100, 1) if total > 0 else 0,
+                "wins": len(win_pnls),
+                "losses": len(loss_pnls),
+                "win_rate": round(len(win_pnls) / total * 100, 1) if total > 0 else 0,
                 "total_pnl": round(total_pnl, 2),
                 "avg_pnl": round(total_pnl / total, 2) if total > 0 else 0,
+                "avg_win": round(avg_win, 2),
+                "avg_loss": round(avg_loss, 2),
+                "profit_factor": round(profit_factor, 2),
             },
+            "insights": insights,
+            "hold_time_analysis": hold_time_analysis,
             "win_rate_by_time": win_rate_by_time,
             "hourly_stats": hourly_stats,
             "day_stats": day_stats,
             "instrument_stats": instrument_stats,
             "best_setup": best_worst["best"],
             "worst_setup": best_worst["worst"],
-            "hold_time": hold_time,
         }
 
     # -- private helpers --

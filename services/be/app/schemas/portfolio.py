@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 
 class HoldingResponse(BaseModel):
+    id: str
     symbol: str
     side: str
     quantity: int
@@ -13,6 +14,17 @@ class HoldingResponse(BaseModel):
     realized_pnl: float | None = None
     pnl: float
     pnl_pct: float
+    lots: int | None = None
+    expiry: str | None = None
+    created_at: str | None = None
+
+
+class BalanceResponse(BaseModel):
+    cash: float
+    initial_cash: float
+    invested_value: float
+    total_value: float
+    total_pnl: float
 
 
 class PortfolioBalanceResponse(BaseModel):
@@ -21,3 +33,8 @@ class PortfolioBalanceResponse(BaseModel):
     invested_value: float
     total_value: float
     total_pnl: float
+
+
+class PortfolioSummaryResponse(BaseModel):
+    balance: BalanceResponse
+    holdings: list[HoldingResponse]

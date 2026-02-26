@@ -10,6 +10,7 @@ from app.config import settings
 from app.services.be_client import BEClient
 
 logging.basicConfig(level=logging.INFO)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
