@@ -7,8 +7,8 @@ export default function DrawdownTracker({ historyData, dailyLossLimit = 25000 })
 
   // Calculate drawdown at each point
   const drawdownData = historyData.map((point, index) => {
-    const maxPnlSoFar = Math.max(...historyData.slice(0, index + 1).map(p => p.pnl))
-    const drawdown = point.pnl - maxPnlSoFar
+    const maxPnlSoFar = Math.max(...historyData.slice(0, index + 1).map(p => p.pnl ?? 0))
+    const drawdown = (point.pnl ?? 0) - maxPnlSoFar
     return {
       ...point,
       drawdown: Math.min(0, drawdown),
