@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
+from app.schemas.portfolio import HoldingResponse
 from app.seed import DEFAULT_USER_ID
 from app.services.portfolio import PortfolioService
 
@@ -18,7 +19,7 @@ def get_portfolio_service(
     return PortfolioService(session=session, price_service=request.app.state.price_service)
 
 
-@router.get("/holdings")
+@router.get("/holdings", response_model=list[HoldingResponse])
 async def get_holdings(
     instrument: str | None = Query(None),
     filter: str | None = Query(None),

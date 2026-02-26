@@ -53,6 +53,8 @@ class PortfolioService:
                 "quantity": h.quantity,
                 "avg_price": h.avg_price,
                 "current_price": current_price,
+                "unrealized_pnl": round(pnl, 2),
+                "realized_pnl": None,
                 "pnl": round(pnl, 2),
                 "pnl_pct": round(pnl_pct, 2),
             })
