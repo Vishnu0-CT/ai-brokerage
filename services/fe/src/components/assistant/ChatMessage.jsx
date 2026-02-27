@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import { formatTimestamp } from '../../utils/formatters'
 
 export default function ChatMessage({ message }) {
   const isUser = message.role === 'user'
   const isError = message.isError
+  const isStreaming = message.isStreaming
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} message-enter`}>
@@ -18,7 +20,7 @@ export default function ChatMessage({ message }) {
         {/* Header */}
         <div className="flex items-center gap-2 mb-2">
           {!isUser && (
-            <div className="w-6 h-6 rounded-full bg-accent/20 flex items-center justify-center">
+            <div className={`w-6 h-6 rounded-full bg-accent/20 flex items-center justify-center ${isStreaming ? 'animate-pulse' : ''}`}>
               <svg className="w-4 h-4 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="3" />
                 <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
@@ -31,11 +33,21 @@ export default function ChatMessage({ message }) {
           <span className="text-xs text-slate-500">
             {formatTimestamp(message.timestamp)}
           </span>
+          {isStreaming && (
+            <span className="text-xs text-accent animate-pulse flex items-center gap-1">
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              typing...
+            </span>
+          )}
         </div>
 
         {/* Content */}
         <div className={`text-sm leading-relaxed ${isUser ? 'text-slate-200' : 'text-slate-300'}`}>
           <MessageContent content={message.content} />
+          {isStreaming && <span className="inline-block w-2 h-4 bg-accent animate-pulse ml-1"></span>}
         </div>
       </div>
     </div>
@@ -129,21 +141,50 @@ function Block({ block }) {
 }
 
 function CodeBlock({ language, content }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(content)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   return (
-    <div className="relative group">
-      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+    <div className="relative group my-3">
+      <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
         <button
-          onClick={() => navigator.clipboard.writeText(content)}
-          className="px-2 py-1 text-xs bg-navy-600 hover:bg-navy-500 text-slate-300 rounded"
+          onClick={handleCopy}
+          className="px-3 py-1.5 text-xs bg-navy-600 hover:bg-navy-500 text-slate-300 rounded-md shadow-lg transition-colors flex items-center gap-1.5"
         >
-          Copy
+          {copied ? (
+            <>
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Copied!
+            </>
+          ) : (
+            <>
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+              Copy
+            </>
+          )}
         </button>
       </div>
       {language && (
-        <div className="text-xs text-slate-500 mb-1 font-mono">{language}</div>
+        <div className="flex items-center gap-2 bg-navy-800 border border-navy-600 border-b-0 rounded-t-lg px-4 py-2">
+          <svg className="w-4 h-4 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="16 18 22 12 16 6"/>
+            <polyline points="8 6 2 12 8 18"/>
+          </svg>
+          <span className="text-xs text-slate-400 font-mono font-medium uppercase tracking-wide">{language}</span>
+        </div>
       )}
-      <pre className="bg-navy-900 border border-navy-600 rounded-lg p-3 overflow-x-auto">
-        <code className="text-sm font-mono text-slate-300">{content}</code>
+      <pre className={`bg-navy-900 border border-navy-600 ${language ? 'rounded-b-lg' : 'rounded-lg'} p-4 overflow-x-auto`}>
+        <code className="text-sm font-mono text-slate-300 leading-relaxed">{content}</code>
       </pre>
     </div>
   )
@@ -151,15 +192,15 @@ function CodeBlock({ language, content }) {
 
 function Heading({ level, text }) {
   const sizes = {
-    1: 'text-xl font-bold',
-    2: 'text-lg font-bold',
-    3: 'text-base font-semibold',
-    4: 'text-base font-semibold',
-    5: 'text-sm font-semibold',
-    6: 'text-sm font-semibold',
+    1: 'text-xl font-bold text-slate-100 border-b border-navy-500 pb-2',
+    2: 'text-lg font-bold text-slate-100',
+    3: 'text-base font-semibold text-slate-200',
+    4: 'text-base font-semibold text-slate-200',
+    5: 'text-sm font-semibold text-slate-300',
+    6: 'text-sm font-semibold text-slate-300',
   }
   return (
-    <div className={`${sizes[level]} text-slate-100 mt-4 mb-2`}>
+    <div className={`${sizes[level]} mt-4 mb-3 first:mt-0`}>
       <InlineFormatting text={text} />
     </div>
   )
@@ -167,11 +208,11 @@ function Heading({ level, text }) {
 
 function List({ items }) {
   return (
-    <ul className="space-y-1.5 ml-1">
+    <ul className="space-y-2 ml-2 my-3">
       {items.map((item, i) => (
-        <li key={i} className="flex items-start gap-2">
-          <span className="text-accent mt-1.5 text-xs">{'\u2022'}</span>
-          <span><InlineFormatting text={item} /></span>
+        <li key={i} className="flex items-start gap-3">
+          <span className="text-accent mt-1 text-sm flex-shrink-0">{'\u2022'}</span>
+          <span className="flex-1 text-slate-300"><InlineFormatting text={item} /></span>
         </li>
       ))}
     </ul>
@@ -179,7 +220,7 @@ function List({ items }) {
 }
 
 function Paragraph({ text }) {
-  return <p><InlineFormatting text={text} /></p>
+  return <p className="leading-7 text-slate-300 my-2"><InlineFormatting text={text} /></p>
 }
 
 function InlineFormatting({ text }) {
