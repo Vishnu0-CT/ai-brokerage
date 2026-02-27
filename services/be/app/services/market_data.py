@@ -397,12 +397,12 @@ STRIKE_INTERVALS = {
 def _get_deterministic_noise(symbol: str, strike: int, is_call: bool) -> float:
     """
     Get deterministic noise factor based on symbol, strike, and option type.
-    Returns a value between 0.95 and 1.05 for consistent pricing.
+    Returns a value between 0.98 and 1.02 for consistent but small variations.
     """
     key = f"{symbol}_{strike}_{'CE' if is_call else 'PE'}"
     hash_val = int(hashlib.md5(key.encode()).hexdigest(), 16)
-    # Map to range 0.95 to 1.05
-    return 0.95 + (hash_val % 100) / 1000
+    # Map to range 0.98 to 1.02 (much smaller variation)
+    return 0.98 + (hash_val % 100) / 2500
 
 
 def _calculate_option_price(
@@ -442,16 +442,16 @@ def _calculate_option_price(
 def _calculate_iv(spot: float, strike: int, is_call: bool, symbol: str = "") -> float:
     """Calculate implied volatility (mock) with deterministic variation."""
     moneyness = abs(spot - strike) / spot
-    
+
     # IV smile - higher IV for OTM options
     base_iv = 0.15
     smile_factor = 1 + moneyness * 2
-    
+
     # Use deterministic variation instead of random
     noise = _get_deterministic_noise(symbol, strike, is_call)
-    # Map noise from 0.95-1.05 to 0.9-1.1
-    iv_noise = 0.9 + (noise - 0.95) * 2
-    
+    # Map noise from 0.98-1.02 to 0.96-1.04 (smaller IV variation)
+    iv_noise = 0.96 + (noise - 0.98) * 2
+
     iv = base_iv * smile_factor * iv_noise
     return round(iv * 100, 2)  # Return as percentage
 
@@ -509,8 +509,9 @@ def generate_option_chain(
         call_hash = int(hashlib.md5(f"{symbol}_{strike}_CE".encode()).hexdigest(), 16)
         call_oi = 10000 + (call_hash % 490000)
         call_volume = 1000 + (call_hash % 49000)
-        call_change = -10 + (call_hash % 2000) / 100  # Range: -10 to 10
-        
+        # Smaller changes for options: Range -2 to +2 (realistic for Indian options)
+        call_change = -2 + (call_hash % 400) / 100
+
         # Calculate put data with deterministic pricing
         put_price = _calculate_option_price(spot_price, strike, False, days_to_expiry, symbol=symbol)
         put_iv = _calculate_iv(spot_price, strike, False, symbol=symbol)
@@ -518,7 +519,8 @@ def generate_option_chain(
         put_hash = int(hashlib.md5(f"{symbol}_{strike}_PE".encode()).hexdigest(), 16)
         put_oi = 10000 + (put_hash % 490000)
         put_volume = 1000 + (put_hash % 49000)
-        put_change = -10 + (put_hash % 2000) / 100  # Range: -10 to 10
+        # Smaller changes for options: Range -2 to +2 (realistic for Indian options)
+        put_change = -2 + (put_hash % 400) / 100
         
         # Bid-ask spread (tighter for ATM)
         moneyness = abs(spot_price - strike) / spot_price
