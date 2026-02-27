@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useApi } from '../../hooks/useApi'
+import { useWatchlistPriceStream } from '../../hooks/useWatchlistPriceStream'
 import { getBalance } from '../../api/portfolio'
+import { getHoldings } from '../../api/portfolio'
 import { getWatchlist } from '../../api/watchlist'
 import { getUnreadCount } from '../../api/notifications'
 import { formatINR, getPnlColor } from '../../utils/formatters'
@@ -44,11 +46,55 @@ function LiveClock() {
 
 export default function Header({ onToggleAssistant, isAssistantOpen = false, onNotificationClick }) {
   const { data: balance } = useApi(() => getBalance(), [])
+  const { data: positions } = useApi(() => getHoldings(), [])
   const { data: watchlist } = useApi(() => getWatchlist(), [])
+  const { priceUpdates } = useWatchlistPriceStream(true)
   const [unreadCount, setUnreadCount] = useState(0)
 
-  const pnl = balance?.total_pnl || 0
-  const pnlColor = getPnlColor(pnl)
+  // Merge watchlist with real-time prices
+  const watchlistWithPrices = useMemo(() => {
+    if (!watchlist) return []
+    return watchlist.map(item => {
+      const priceUpdate = priceUpdates[item.symbol]
+      if (priceUpdate) {
+        return {
+          ...item,
+          price: priceUpdate.price,
+          change: priceUpdate.change,
+          change_percent: priceUpdate.change_percent,
+        }
+      }
+      return item
+    })
+  }, [watchlist, priceUpdates])
+
+  // Calculate real-time P&L
+  const realTimePnl = useMemo(() => {
+    if (!balance || !positions || Object.keys(priceUpdates).length === 0) {
+      return balance?.total_pnl || 0
+    }
+
+    // Calculate total unrealized P&L from positions with real-time prices
+    let totalUnrealizedPnl = 0
+    positions.forEach(position => {
+      const baseSymbol = position.symbol.split(' ')[0]
+      const priceUpdate = priceUpdates[baseSymbol]
+
+      if (priceUpdate && priceUpdate.price && position.symbol === baseSymbol) {
+        const currentPrice = priceUpdate.price
+        const isLong = position.side === 'BUY' || position.side === 'long'
+        const pnl = (currentPrice - position.avg_price) * position.quantity * (isLong ? 1 : -1)
+        totalUnrealizedPnl += pnl
+      } else {
+        totalUnrealizedPnl += position.unrealized_pnl || 0
+      }
+    })
+
+    const realizedPnl = balance.realized_pnl || 0
+    return realizedPnl + totalUnrealizedPnl
+  }, [balance, positions, priceUpdates])
+
+  const pnlColor = getPnlColor(realTimePnl)
 
   useEffect(() => {
     loadUnreadCount()
@@ -66,9 +112,9 @@ export default function Header({ onToggleAssistant, isAssistantOpen = false, onN
   }
 
   // Extract index tickers from watchlist (NIFTY, BANKNIFTY, VIX)
-  const nifty = watchlist?.find(w => w.symbol === 'NIFTY 50')
-  const bankNifty = watchlist?.find(w => w.symbol === 'BANKNIFTY' || w.symbol === 'BANK NIFTY')
-  const vix = watchlist?.find(w => w.symbol === 'INDIA VIX')
+  const nifty = watchlistWithPrices?.find(w => w.symbol === 'NIFTY' || w.symbol === 'NIFTY 50')
+  const bankNifty = watchlistWithPrices?.find(w => w.symbol === 'BANKNIFTY' || w.symbol === 'BANK NIFTY')
+  const vix = watchlistWithPrices?.find(w => w.symbol === 'INDIA VIX' || w.symbol === 'VIX')
 
   return (
     <header className="h-16 bg-navy-800 border-b border-navy-600 px-6 flex items-center justify-between sticky top-0 z-50">
@@ -99,7 +145,7 @@ export default function Header({ onToggleAssistant, isAssistantOpen = false, onN
         <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-navy-700/50 border border-navy-600">
           <span className="text-xs text-slate-400">Today's P&L</span>
           <span className={`font-mono text-sm font-semibold ${pnlColor}`}>
-            {formatINR(pnl, true)}
+            {formatINR(realTimePnl, true)}
           </span>
         </div>
 

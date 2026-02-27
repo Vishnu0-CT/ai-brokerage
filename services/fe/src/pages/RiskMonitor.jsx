@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useApi } from '../hooks/useApi'
+import { useWatchlistPriceStream } from '../hooks/useWatchlistPriceStream'
 import { getAlerts, getRiskMetrics, dismissAlert as dismissAlertApi } from '../api/alerts'
 import { getTradingSignal } from '../api/analytics'
-import { getHistory } from '../api/portfolio'
+import { getHistory, getBalance } from '../api/portfolio'
+import { getHoldings } from '../api/portfolio'
 import RiskGauge from '../components/risk/RiskGauge'
 import AlertCard from '../components/risk/AlertCard'
 import DrawdownTracker from '../components/risk/DrawdownTracker'
@@ -16,6 +18,9 @@ export default function RiskMonitor() {
   const { data: riskMetrics, loading: metricsLoading, error: metricsError, refetch: refetchMetrics } = useApi(() => getRiskMetrics(), [])
   const { data: signal, loading: signalLoading } = useApi(() => getTradingSignal(), [])
   const { data: historyData } = useApi(() => getHistory('1d'), [])
+  const { data: balance } = useApi(() => getBalance(), [])
+  const { data: positions } = useApi(() => getHoldings(), [])
+  const { priceUpdates } = useWatchlistPriceStream(true)
 
   const handleDismiss = async (id) => {
     try {
@@ -26,6 +31,66 @@ export default function RiskMonitor() {
     }
   }
 
+  // Calculate real-time P&L
+  const realTimePnl = useMemo(() => {
+    if (!balance || !positions || Object.keys(priceUpdates).length === 0) {
+      return balance?.total_pnl || 0
+    }
+
+    let totalUnrealizedPnl = 0
+    positions.forEach(position => {
+      const baseSymbol = position.symbol.split(' ')[0]
+      const priceUpdate = priceUpdates[baseSymbol]
+
+      if (priceUpdate && priceUpdate.price && position.symbol === baseSymbol) {
+        const currentPrice = priceUpdate.price
+        const isLong = position.side === 'BUY' || position.side === 'long'
+        const pnl = (currentPrice - position.avg_price) * position.quantity * (isLong ? 1 : -1)
+        totalUnrealizedPnl += pnl
+      } else {
+        totalUnrealizedPnl += position.unrealized_pnl || 0
+      }
+    })
+
+    const realizedPnl = balance.realized_pnl || 0
+    return realizedPnl + totalUnrealizedPnl
+  }, [balance, positions, priceUpdates])
+
+  // Calculate real-time position values and concentration
+  const { positionValues, maxConcentration, totalValue, marginUtilization } = useMemo(() => {
+    if (!positions || !balance) {
+      return { positionValues: [], maxConcentration: 0, totalValue: 0, marginUtilization: 0 }
+    }
+
+    const values = positions.map(position => {
+      const baseSymbol = position.symbol.split(' ')[0]
+      const priceUpdate = priceUpdates[baseSymbol]
+
+      let currentPrice = position.current_price
+      if (priceUpdate && priceUpdate.price && position.symbol === baseSymbol) {
+        currentPrice = priceUpdate.price
+      }
+
+      const positionValue = Math.abs(currentPrice * position.quantity)
+      return {
+        symbol: position.symbol,
+        value: positionValue
+      }
+    })
+
+    const total = values.reduce((sum, p) => sum + p.value, 0)
+    const maxValue = Math.max(...values.map(p => p.value), 0)
+    const concentration = total > 0 ? (maxValue / total) * 100 : 0
+    const margin = balance.initial_cash > 0 ? (total / balance.initial_cash) * 100 : 0
+
+    return {
+      positionValues: values,
+      maxConcentration: concentration,
+      totalValue: total,
+      marginUtilization: margin
+    }
+  }, [positions, priceUpdates, balance])
+
   const filteredAlerts = alerts?.filter((alert) => {
     if (alertFilter === 'all') return true
     return alert.severity === alertFilter
@@ -35,16 +100,18 @@ export default function RiskMonitor() {
   const criticalCount = alerts?.filter(a => a.severity === 'critical')?.length || 0
 
   // Extract risk metrics safely — API returns nested objects for drawdown, trade_velocity, concentration, margin
+  const dailyLossLimit = riskMetrics?.daily_loss_limit || balance?.daily_loss_limit || 25000
   const drawdown = riskMetrics?.drawdown || {}
   const drawdownPct = drawdown.percent || 0
-  const drawdownValue = drawdown.current || 0
-  const dailyLossLimit = riskMetrics?.daily_loss_limit || 25000
+  const drawdownValue = drawdown.current || Math.min(0, realTimePnl)
   const velocity = riskMetrics?.trade_velocity || {}
   const tradeVelocity = typeof velocity === 'number' ? velocity : (velocity.count || 0)
   const maxTradesPerDay = (typeof velocity === 'object' && velocity.avg_per_day ? Math.round(velocity.avg_per_day * 2) : riskMetrics?.max_trades_per_day) || 20
-  const concentration = riskMetrics?.concentration || {}
-  const concentrationPct = typeof concentration === 'number' ? concentration : (concentration.percent || 0)
+
+  // Use real-time concentration
+  const concentrationPct = maxConcentration
   const concentrationMax = 100
+
   // Margin data comes from riskMetrics.margin
   const margin = riskMetrics?.margin || {}
   const marginUsedValue = margin.used || 0
@@ -157,7 +224,7 @@ export default function RiskMonitor() {
       {/* Drawdown Tracker + Behaviour */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
-          <DrawdownTracker historyData={historyData} dailyLossLimit={dailyLossLimit} />
+          <DrawdownTracker historyData={historyData} dailyLossLimit={dailyLossLimit} currentPnl={realTimePnl} />
         </div>
         <div className="space-y-4">
           <div className="bg-navy-800 border border-navy-600 rounded-xl p-5">

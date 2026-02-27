@@ -5,6 +5,7 @@ Manages watchlist, option chain generation, and expiry dates.
 """
 from __future__ import annotations
 
+import hashlib
 import math
 import random
 import uuid
@@ -25,25 +26,25 @@ DEFAULT_WATCHLIST = [
         "symbol": "NIFTY",
         "name": "NIFTY 50",
         "instrument_type": "INDEX",
-        "lot_size": 50,
+        "lot_size": 25,  # Revised lot size
         "tick_size": 0.05,
-        "base_price": 26478.50,
+        "base_price": 25496.55,
     },
     {
         "symbol": "BANKNIFTY",
         "name": "BANK NIFTY",
         "instrument_type": "INDEX",
-        "lot_size": 30,
+        "lot_size": 15,  # Revised lot size
         "tick_size": 0.05,
-        "base_price": 57723.00,
+        "base_price": 61187.70,
     },
     {
         "symbol": "FINNIFTY",
         "name": "FIN NIFTY",
         "instrument_type": "INDEX",
-        "lot_size": 40,
+        "lot_size": 25,  # Revised lot size
         "tick_size": 0.05,
-        "base_price": 24500.00,
+        "base_price": 28309.85,
     },
     # Stocks
     {
@@ -52,7 +53,7 @@ DEFAULT_WATCHLIST = [
         "instrument_type": "STOCK",
         "lot_size": 250,
         "tick_size": 0.05,
-        "base_price": 1280.00,
+        "base_price": 1423.90,
     },
     {
         "symbol": "HDFCBANK",
@@ -60,7 +61,7 @@ DEFAULT_WATCHLIST = [
         "instrument_type": "STOCK",
         "lot_size": 550,
         "tick_size": 0.05,
-        "base_price": 1780.00,
+        "base_price": 915.60,
     },
     {
         "symbol": "INFY",
@@ -68,7 +69,7 @@ DEFAULT_WATCHLIST = [
         "instrument_type": "STOCK",
         "lot_size": 300,
         "tick_size": 0.05,
-        "base_price": 1550.00,
+        "base_price": 1407.30,
     },
     {
         "symbol": "TCS",
@@ -76,7 +77,7 @@ DEFAULT_WATCHLIST = [
         "instrument_type": "STOCK",
         "lot_size": 175,
         "tick_size": 0.05,
-        "base_price": 3800.00,
+        "base_price": 2738.80,
     },
     {
         "symbol": "ICICIBANK",
@@ -84,7 +85,7 @@ DEFAULT_WATCHLIST = [
         "instrument_type": "STOCK",
         "lot_size": 700,
         "tick_size": 0.05,
-        "base_price": 1085.00,
+        "base_price": 1401.80,
     },
     {
         "symbol": "SBIN",
@@ -92,7 +93,7 @@ DEFAULT_WATCHLIST = [
         "instrument_type": "STOCK",
         "lot_size": 1500,
         "tick_size": 0.05,
-        "base_price": 785.00,
+        "base_price": 1224.90,
     },
     {
         "symbol": "TATAMOTORS",
@@ -102,13 +103,249 @@ DEFAULT_WATCHLIST = [
         "tick_size": 0.05,
         "base_price": 735.00,
     },
+    # Banking & Finance
+    {
+        "symbol": "AXISBANK",
+        "name": "AXISBANK",
+        "instrument_type": "STOCK",
+        "lot_size": 750,
+        "tick_size": 0.05,
+        "base_price": 1387.10,
+    },
+    {
+        "symbol": "KOTAKBANK",
+        "name": "KOTAKBANK",
+        "instrument_type": "STOCK",
+        "lot_size": 400,
+        "tick_size": 0.05,
+        "base_price": 428.90,
+    },
+    {
+        "symbol": "BAJFINANCE",
+        "name": "BAJFINANCE",
+        "instrument_type": "STOCK",
+        "lot_size": 125,
+        "tick_size": 0.05,
+        "base_price": 1017.05,
+    },
+    # IT Sector
+    {
+        "symbol": "WIPRO",
+        "name": "WIPRO",
+        "instrument_type": "STOCK",
+        "lot_size": 1200,
+        "tick_size": 0.05,
+        "base_price": 216.76,
+    },
+    {
+        "symbol": "HCLTECH",
+        "name": "HCLTECH",
+        "instrument_type": "STOCK",
+        "lot_size": 400,
+        "tick_size": 0.05,
+        "base_price": 1489.30,
+    },
+    {
+        "symbol": "TECHM",
+        "name": "TECHM",
+        "instrument_type": "STOCK",
+        "lot_size": 450,
+        "tick_size": 0.05,
+        "base_price": 1529.30,
+    },
+    # Auto Sector
+    {
+        "symbol": "M&M",
+        "name": "M&M",
+        "instrument_type": "STOCK",
+        "lot_size": 300,
+        "tick_size": 0.05,
+        "base_price": 3474.10,
+    },
+    {
+        "symbol": "MARUTI",
+        "name": "MARUTI",
+        "instrument_type": "STOCK",
+        "lot_size": 50,
+        "tick_size": 0.05,
+        "base_price": 12800.00,
+    },
+    {
+        "symbol": "BAJAJ-AUTO",
+        "name": "BAJAJ-AUTO",
+        "instrument_type": "STOCK",
+        "lot_size": 125,
+        "tick_size": 0.05,
+        "base_price": 9759.50,
+    },
+    # Pharma Sector
+    {
+        "symbol": "SUNPHARMA",
+        "name": "SUNPHARMA",
+        "instrument_type": "STOCK",
+        "lot_size": 400,
+        "tick_size": 0.05,
+        "base_price": 1820.00,
+    },
+    {
+        "symbol": "DRREDDY",
+        "name": "DRREDDY",
+        "instrument_type": "STOCK",
+        "lot_size": 125,
+        "tick_size": 0.05,
+        "base_price": 1265.90,
+    },
+    {
+        "symbol": "CIPLA",
+        "name": "CIPLA",
+        "instrument_type": "STOCK",
+        "lot_size": 500,
+        "tick_size": 0.05,
+        "base_price": 1346.20,
+    },
+    # FMCG Sector
+    {
+        "symbol": "ITC",
+        "name": "ITC",
+        "instrument_type": "STOCK",
+        "lot_size": 1600,
+        "tick_size": 0.05,
+        "base_price": 325.50,
+    },
+    {
+        "symbol": "HINDUNILVR",
+        "name": "HINDUNILVR",
+        "instrument_type": "STOCK",
+        "lot_size": 300,
+        "tick_size": 0.05,
+        "base_price": 2279.30,
+    },
+    {
+        "symbol": "BRITANNIA",
+        "name": "BRITANNIA",
+        "instrument_type": "STOCK",
+        "lot_size": 200,
+        "tick_size": 0.05,
+        "base_price": 5200.00,
+    },
+    # Energy Sector
+    {
+        "symbol": "ONGC",
+        "name": "ONGC",
+        "instrument_type": "STOCK",
+        "lot_size": 2850,
+        "tick_size": 0.05,
+        "base_price": 274.65,
+    },
+    {
+        "symbol": "BPCL",
+        "name": "BPCL",
+        "instrument_type": "STOCK",
+        "lot_size": 1750,
+        "tick_size": 0.05,
+        "base_price": 320.00,
+    },
+    {
+        "symbol": "POWERGRID",
+        "name": "POWERGRID",
+        "instrument_type": "STOCK",
+        "lot_size": 2100,
+        "tick_size": 0.05,
+        "base_price": 298.50,
+    },
+    # Metals & Mining
+    {
+        "symbol": "TATASTEEL",
+        "name": "TATASTEEL",
+        "instrument_type": "STOCK",
+        "lot_size": 650,
+        "tick_size": 0.05,
+        "base_price": 203.30,
+    },
+    {
+        "symbol": "HINDALCO",
+        "name": "HINDALCO",
+        "instrument_type": "STOCK",
+        "lot_size": 1200,
+        "tick_size": 0.05,
+        "base_price": 890.30,
+    },
+    {
+        "symbol": "JSWSTEEL",
+        "name": "JSWSTEEL",
+        "instrument_type": "STOCK",
+        "lot_size": 850,
+        "tick_size": 0.05,
+        "base_price": 960.00,
+    },
+    # Telecom
+    {
+        "symbol": "BHARTIARTL",
+        "name": "BHARTIARTL",
+        "instrument_type": "STOCK",
+        "lot_size": 550,
+        "tick_size": 0.05,
+        "base_price": 2029.60,
+    },
+    # Conglomerates & Infrastructure
+    {
+        "symbol": "ADANIENT",
+        "name": "ADANIENT",
+        "instrument_type": "STOCK",
+        "lot_size": 250,
+        "tick_size": 0.05,
+        "base_price": 2204.90,
+    },
+    {
+        "symbol": "LT",
+        "name": "LT",
+        "instrument_type": "STOCK",
+        "lot_size": 300,
+        "tick_size": 0.05,
+        "base_price": 3650.00,
+    },
+    {
+        "symbol": "ULTRACEMCO",
+        "name": "ULTRACEMCO",
+        "instrument_type": "STOCK",
+        "lot_size": 100,
+        "tick_size": 0.05,
+        "base_price": 12943.00,
+    },
+    # Additional Popular Stocks
+    {
+        "symbol": "ASIANPAINT",
+        "name": "ASIANPAINT",
+        "instrument_type": "STOCK",
+        "lot_size": 300,
+        "tick_size": 0.05,
+        "base_price": 2439.20,
+    },
+    {
+        "symbol": "NTPC",
+        "name": "NTPC",
+        "instrument_type": "STOCK",
+        "lot_size": 2175,
+        "tick_size": 0.05,
+        "base_price": 370.00,
+    },
+    {
+        "symbol": "COALINDIA",
+        "name": "COALINDIA",
+        "instrument_type": "STOCK",
+        "lot_size": 1800,
+        "tick_size": 0.05,
+        "base_price": 421.60,
+    },
 ]
 
 # Strike intervals for different instruments
 STRIKE_INTERVALS = {
+    # Indices
     "NIFTY": 50,
     "BANKNIFTY": 100,
     "FINNIFTY": 50,
+    # Original Stocks
     "RELIANCE": 10,
     "HDFCBANK": 20,
     "INFY": 20,
@@ -116,21 +353,56 @@ STRIKE_INTERVALS = {
     "ICICIBANK": 10,
     "SBIN": 10,
     "TATAMOTORS": 10,
+    # Banking & Finance
+    "AXISBANK": 10,
+    "KOTAKBANK": 20,
+    "BAJFINANCE": 100,
+    # IT Sector
+    "WIPRO": 5,
+    "HCLTECH": 20,
+    "TECHM": 20,
+    # Auto Sector
+    "M&M": 50,
+    "MARUTI": 100,
+    "BAJAJ-AUTO": 100,
+    # Pharma Sector
+    "SUNPHARMA": 20,
+    "DRREDDY": 50,
+    "CIPLA": 20,
+    # FMCG Sector
+    "ITC": 5,
+    "HINDUNILVR": 20,
+    "BRITANNIA": 50,
+    # Energy Sector
+    "ONGC": 5,
+    "BPCL": 5,
+    "POWERGRID": 5,
+    # Metals & Mining
+    "TATASTEEL": 5,
+    "HINDALCO": 10,
+    "JSWSTEEL": 10,
+    # Telecom
+    "BHARTIARTL": 20,
+    # Conglomerates & Infrastructure
+    "ADANIENT": 20,
+    "LT": 50,
+    "ULTRACEMCO": 100,
+    # Additional Popular Stocks
+    "ASIANPAINT": 20,
+    "NTPC": 5,
+    "COALINDIA": 5,
 }
-
-
-import hashlib
 
 
 def _get_deterministic_noise(symbol: str, strike: int, is_call: bool) -> float:
     """
     Get deterministic noise factor based on symbol, strike, and option type.
-    Returns a value between 0.95 and 1.05 for consistent pricing.
+    Returns a value between 0.98 and 1.02 for consistent but small variations.
     """
     key = f"{symbol}_{strike}_{'CE' if is_call else 'PE'}"
     hash_val = int(hashlib.md5(key.encode()).hexdigest(), 16)
-    # Map to range 0.95 to 1.05
-    return 0.95 + (hash_val % 100) / 1000
+    # Map to range 0.98 to 1.02 (much smaller variation)
+    return 0.98 + (hash_val % 100) / 2500
 
 
 def _calculate_option_price(
@@ -170,16 +442,16 @@ def _calculate_option_price(
 def _calculate_iv(spot: float, strike: int, is_call: bool, symbol: str = "") -> float:
     """Calculate implied volatility (mock) with deterministic variation."""
     moneyness = abs(spot - strike) / spot
-    
+
     # IV smile - higher IV for OTM options
     base_iv = 0.15
     smile_factor = 1 + moneyness * 2
-    
+
     # Use deterministic variation instead of random
     noise = _get_deterministic_noise(symbol, strike, is_call)
-    # Map noise from 0.95-1.05 to 0.9-1.1
-    iv_noise = 0.9 + (noise - 0.95) * 2
-    
+    # Map noise from 0.98-1.02 to 0.96-1.04 (smaller IV variation)
+    iv_noise = 0.96 + (noise - 0.98) * 2
+
     iv = base_iv * smile_factor * iv_noise
     return round(iv * 100, 2)  # Return as percentage
 
@@ -201,12 +473,30 @@ def generate_option_chain(
     # Find ATM strike
     atm_strike = round(spot_price / strike_interval) * strike_interval
     
-    # Generate strikes
+    # Generate strikes with randomness
     half_strikes = num_strikes // 2
     strikes = []
-    
+
+    # Use deterministic randomness based on symbol and expiry
+    seed_hash = int(hashlib.md5(f"{symbol}_{days_to_expiry}".encode()).hexdigest()[:8], 16)
+
     for i in range(-half_strikes, half_strikes + 1):
-        strike = atm_strike + (i * strike_interval)
+        # Add random variation to strike interval (±20% of interval)
+        # Uses deterministic variation based on position
+        variation_seed = (seed_hash + i) % 100
+        # Map to range -0.2 to +0.2 (±20%)
+        variation_factor = (variation_seed / 100 - 0.5) * 0.4
+
+        # Apply variation to the interval
+        adjusted_interval = strike_interval * (1 + variation_factor)
+        strike = atm_strike + (i * adjusted_interval)
+
+        # Round to nearest tick (typically 0.05 or whole number for indices)
+        if strike_interval >= 10:
+            strike = round(strike)  # Round to whole number for larger intervals
+        else:
+            strike = round(strike / 0.05) * 0.05  # Round to nearest 0.05
+
         strikes.append(strike)
     
     option_chain = []
@@ -219,8 +509,9 @@ def generate_option_chain(
         call_hash = int(hashlib.md5(f"{symbol}_{strike}_CE".encode()).hexdigest(), 16)
         call_oi = 10000 + (call_hash % 490000)
         call_volume = 1000 + (call_hash % 49000)
-        call_change = -10 + (call_hash % 2000) / 100  # Range: -10 to 10
-        
+        # Smaller changes for options: Range -2 to +2 (realistic for Indian options)
+        call_change = -2 + (call_hash % 400) / 100
+
         # Calculate put data with deterministic pricing
         put_price = _calculate_option_price(spot_price, strike, False, days_to_expiry, symbol=symbol)
         put_iv = _calculate_iv(spot_price, strike, False, symbol=symbol)
@@ -228,7 +519,8 @@ def generate_option_chain(
         put_hash = int(hashlib.md5(f"{symbol}_{strike}_PE".encode()).hexdigest(), 16)
         put_oi = 10000 + (put_hash % 490000)
         put_volume = 1000 + (put_hash % 49000)
-        put_change = -10 + (put_hash % 2000) / 100  # Range: -10 to 10
+        # Smaller changes for options: Range -2 to +2 (realistic for Indian options)
+        put_change = -2 + (put_hash % 400) / 100
         
         # Bid-ask spread (tighter for ATM)
         moneyness = abs(spot_price - strike) / spot_price
