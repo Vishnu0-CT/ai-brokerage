@@ -45,7 +45,7 @@ class AlertDetectorService:
 
                 if len(next_trades) >= 3:
                     last_time = datetime.fromisoformat(next_trades[-1]["created_at"])
-                    window_mins = (last_time - trigger_time).total_seconds() / 60
+                    window_mins = abs((last_time - trigger_time).total_seconds() / 60)
 
                     if 0 < window_mins <= 30:
                         revenge_pnl = sum(

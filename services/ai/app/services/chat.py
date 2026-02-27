@@ -3,13 +3,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import anthropic
 import httpx
 
 from app.config import settings
-from app.prompts.system import build_system_prompt
+from app.prompts.system import build_system_prompt, build_system_prompt_text
 from app.tools import ALL_TOOLS
 from app.tools.dispatcher import ToolDispatcher
 from app.utils.http_logging import EVENT_HOOKS
@@ -236,6 +237,78 @@ class ChatService:
             parsed = router.finalize()
             await self.be.save_message(conversation_id, "assistant", text_content)
             return parsed
+
+    async def process_message_text_streaming(
+        self,
+        conversation_id: str,
+        user_message: str,
+        on_chunk: Callable[[str], Awaitable[None]],
+        on_tool_activity: Any = None,
+    ) -> None:
+        """Stream raw markdown tokens via on_chunk — no JSON wrapping, no ResponseRouter."""
+        async with _get_conversation_lock(conversation_id):
+            await self.be.save_message(conversation_id, "user", user_message)
+
+            history_coro = self.load_history(conversation_id)
+            prompt_coro = build_system_prompt_text(self.be, conversation_id)
+            history, system_prompt = await asyncio.gather(history_coro, prompt_coro)
+
+            if not history or history[-1].get("content") != user_message:
+                history.append({"role": "user", "content": user_message})
+
+            response = None
+
+            while True:
+                full_text: list[str] = []
+
+                async with self._client.messages.stream(
+                    model=settings.anthropic_model,
+                    max_tokens=4096,
+                    system=system_prompt,
+                    tools=ALL_TOOLS,
+                    messages=history,
+                ) as stream:
+                    async for text in stream.text_stream:
+                        full_text.append(text)
+                        await on_chunk(text)
+
+                    response = await stream.get_final_message()
+
+                if response.stop_reason != "tool_use":
+                    break
+
+                # Handle tool calls (same as voice path)
+                tool_blocks = [b for b in response.content if b.type == "tool_use"]
+                for block in tool_blocks:
+                    await self.be.save_message(
+                        conversation_id, "tool_call", "",
+                        tool_data={"tool_use_id": block.id, "name": block.name, "input": block.input},
+                    )
+                    if on_tool_activity:
+                        on_tool_activity({"tool": block.name, "status": "calling"})
+
+                tool_results = []
+                for block in tool_blocks:
+                    result = await self._dispatcher.dispatch(block.name, block.input)
+                    result_str = json.dumps(result, default=str)
+                    await self.be.save_message(
+                        conversation_id, "tool_result", result_str,
+                        tool_data={"tool_use_id": block.id},
+                    )
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": result_str,
+                    })
+                    if on_tool_activity:
+                        on_tool_activity({"tool": block.name, "status": "complete"})
+
+                history.append({"role": "assistant", "content": response.content})
+                history.append({"role": "user", "content": tool_results})
+
+            # Persist the full response
+            text_content = "".join(b.text for b in response.content if hasattr(b, "text"))
+            await self.be.save_message(conversation_id, "assistant", text_content)
 
     async def _call_claude(self, messages: list[dict], system_prompt: str) -> Any:
         return await self._client.messages.create(

@@ -31,21 +31,21 @@ async def websocket_chat(websocket: WebSocket, conversation_id: uuid.UUID):
             if msg_type == "text":
                 user_message = data["content"]
 
+                async def on_chunk(text: str) -> None:
+                    await websocket.send_json({"type": "response_chunk", "content": text})
+
                 def on_tool_activity(info):
                     asyncio.create_task(
                         websocket.send_json({"type": "tool_activity", **info})
                     )
 
-                result = await chat_svc.process_message_streaming(
+                await chat_svc.process_message_text_streaming(
                     conv_id, user_message,
+                    on_chunk=on_chunk,
                     on_tool_activity=on_tool_activity,
                 )
 
-                await websocket.send_json({
-                    "type": "response",
-                    "voice": result.get("voice", ""),
-                    "detail": result.get("detail", ""),
-                })
+                await websocket.send_json({"type": "response_complete"})
 
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected: {conversation_id}")

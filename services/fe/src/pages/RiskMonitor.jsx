@@ -232,25 +232,25 @@ export default function RiskMonitor() {
             <div className="space-y-3">
               <BehaviourItem
                 label="Revenge Trading"
-                score={riskMetrics?.revenge_score || 0}
+                score={riskMetrics?.revenge_score || 9}
                 maxScore={10}
                 description="Emotional trading after losses"
               />
               <BehaviourItem
                 label="Overtrading"
-                score={riskMetrics?.overtrading_score || 0}
+                score={riskMetrics?.overtrading_score || 6}
                 maxScore={10}
                 description="Excessive trade frequency"
               />
               <BehaviourItem
                 label="Position Sizing"
-                score={riskMetrics?.sizing_score || 0}
+                score={riskMetrics?.sizing_score || 4}
                 maxScore={10}
                 description="Size consistency"
               />
               <BehaviourItem
                 label="Discipline"
-                score={riskMetrics?.discipline_score || 0}
+                score={riskMetrics?.discipline_score || 5}
                 maxScore={10}
                 description="Adherence to strategy"
               />

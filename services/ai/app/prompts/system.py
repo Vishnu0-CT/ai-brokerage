@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from app.services.be_client import BEClient
 
 
-_BASE_PROMPT = """You are ClearTrade, an AI trading assistant for Indian F&O traders. You both execute trades and provide coaching insights.
+_COMMON_HEADER = """You are ClearTrade, an AI trading assistant for Indian F&O traders. You both execute trades and provide coaching insights.
 
 CURRENT TIME: {current_utc} UTC
 
@@ -21,8 +21,9 @@ User messages come from voice transcription and WILL contain errors. When you he
 - "Reliance Shams" / "lion's cell" → search for "RELIANCE"
 - "infant see" / "info sees" → search for "INFY"
 - "bank nifty" → search for "BANKNIFTY"
-If search returns no results, try alternate spellings. If still nothing, tell the user the ticker wasn't found and ask for clarification.
+If search returns no results, try alternate spellings. If still nothing, tell the user the ticker wasn't found and ask for clarification."""
 
+_RESPONSE_FORMAT_VOICE = """
 RESPONSE FORMAT — MANDATORY:
 Always respond with valid JSON in this exact format:
 {{"voice": "<1-2 sentence spoken summary>", "detail": "<full markdown response>"}}
@@ -53,8 +54,18 @@ When the user speaks Hinglish/Hindi, use these patterns for the "voice" field:
 
 When the user speaks English, keep the "voice" field in natural English:
 - Example: "Done, bought 50 shares of RELIANCE at twenty-four fifty."
-- Example: "Your NIFTY profit is around two thousand rupees, about ten percent up."
+- Example: "Your NIFTY profit is around two thousand rupees, about ten percent up.\""""
 
+_RESPONSE_FORMAT_TEXT = """
+RESPONSE FORMAT:
+Respond in markdown. Be thorough and data-rich. Use tables, lists, and formatting as needed.
+Use ₹ symbol for all currency values. Format large numbers in Indian style (lakhs, crores).
+
+LANGUAGE STYLE:
+Mirror the user's language. Default to English. If the user speaks Hinglish or Hindi, match their style in conversational text. Never initiate Hindi unprompted.
+- English for: ticker symbols, numbers, financial terms (P&L, margin, stop-loss, portfolio, drawdown)"""
+
+_COMMON_FOOTER = """
 TOOL USAGE:
 You have access to tools for market data, portfolio management, trading, conditional orders, and behavioural analytics. Use them to answer questions accurately. Chain multiple tools when needed.
 
@@ -170,15 +181,16 @@ def _format_wellbeing_context(ctx: PromptContext) -> str:
     return ""
 
 
-async def build_system_prompt(
+async def _build_prompt(
     be_client: BEClient,
     conversation_id: str,
+    response_format: str,
 ) -> str:
-    """Build the unified system prompt with dynamic context from the BE service."""
+    """Build a system prompt with the given response format section."""
     ctx = await fetch_prompt_context(be_client, conversation_id)
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    prompt = _BASE_PROMPT.format(current_utc=now)
+    prompt = _COMMON_HEADER.format(current_utc=now) + response_format + _COMMON_FOOTER
 
     sections = [
         _format_portfolio_context(ctx),
@@ -191,3 +203,19 @@ async def build_system_prompt(
             prompt += "\n\n" + section
 
     return prompt
+
+
+async def build_system_prompt(
+    be_client: BEClient,
+    conversation_id: str,
+) -> str:
+    """Build system prompt for voice pipeline (JSON format with voice/detail fields)."""
+    return await _build_prompt(be_client, conversation_id, _RESPONSE_FORMAT_VOICE)
+
+
+async def build_system_prompt_text(
+    be_client: BEClient,
+    conversation_id: str,
+) -> str:
+    """Build system prompt for text chat (plain markdown, no JSON wrapping)."""
+    return await _build_prompt(be_client, conversation_id, _RESPONSE_FORMAT_TEXT)
