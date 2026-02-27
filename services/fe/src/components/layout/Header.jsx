@@ -96,12 +96,6 @@ export default function Header({ onToggleAssistant, isAssistantOpen = false, onN
 
   const pnlColor = getPnlColor(realTimePnl)
 
-  useEffect(() => {
-    loadUnreadCount()
-    const interval = setInterval(loadUnreadCount, 30000)
-    return () => clearInterval(interval)
-  }, [])
-
   const loadUnreadCount = async () => {
     try {
       const data = await getUnreadCount()
@@ -110,6 +104,12 @@ export default function Header({ onToggleAssistant, isAssistantOpen = false, onN
       console.error('Failed to load unread count:', error)
     }
   }
+
+  useEffect(() => {
+    loadUnreadCount()
+    const interval = setInterval(loadUnreadCount, 30000)
+    return () => clearInterval(interval)
+  }, [])
 
   // Extract index tickers from watchlist (NIFTY, BANKNIFTY, VIX)
   const nifty = watchlistWithPrices?.find(w => w.symbol === 'NIFTY' || w.symbol === 'NIFTY 50')
