@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { formatINR } from '../../utils/formatters'
 
 const insightIcons = {
@@ -44,7 +45,7 @@ const defaultIcon = (
   </svg>
 )
 
-export default function InsightCard({ insight }) {
+function InsightCard({ insight }) {
   const icon = insightIcons[insight.category] || defaultIcon
   const isPositive = insight.impact >= 0
 
@@ -85,3 +86,6 @@ export default function InsightCard({ insight }) {
     </div>
   )
 }
+
+// Memoize to prevent unnecessary re-renders
+export default memo(InsightCard)

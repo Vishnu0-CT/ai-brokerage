@@ -1,25 +1,50 @@
-import { useMemo } from 'react'
+import { useMemo, memo } from 'react'
 import { XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Area, AreaChart } from 'recharts'
 import { formatINR, formatTime } from '../../utils/formatters'
 import Card, { CardHeader } from '../common/Card'
 
-export default function PLChart({ data }) {
+function PLChart({ data, currentPnl }) {
   if (!data || data.length === 0) return null
 
   // Transform API shape {total_value, cash, invested_value, timestamp} → {pnl, time}
   const chartData = useMemo(() => {
     const baseline = data[0]?.total_value ?? 0
-    return data.map(d => ({
+    const historicalData = data.map(d => ({
       pnl: (d.pnl != null ? d.pnl : (d.total_value != null ? d.total_value - baseline : 0)),
       time: d.time || (d.timestamp ? formatTime(d.timestamp) : ''),
     }))
-  }, [data])
 
-  const currentPnl = chartData[chartData.length - 1]?.pnl || 0
+    // Append current real-time P&L as the latest data point
+    if (currentPnl != null) {
+      const now = new Date()
+      const currentTime = now.toLocaleTimeString('en-IN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      })
+
+      // Check if we already have a data point for this minute
+      const lastDataPoint = historicalData[historicalData.length - 1]
+      if (lastDataPoint && lastDataPoint.time === currentTime) {
+        // Update the last data point with current P&L
+        lastDataPoint.pnl = currentPnl
+      } else {
+        // Add new data point
+        historicalData.push({
+          pnl: currentPnl,
+          time: currentTime,
+        })
+      }
+    }
+
+    return historicalData
+  }, [data, currentPnl])
+
+  const latestPnl = chartData[chartData.length - 1]?.pnl || 0
   const maxPnl = Math.max(...chartData.map(d => d.pnl))
   const minPnl = Math.min(...chartData.map(d => d.pnl))
 
-  const isPositive = currentPnl >= 0
+  const isPositive = latestPnl >= 0
   const strokeColor = isPositive ? '#34D399' : '#F87171'
   const gradientId = 'pnlGradient'
 
@@ -37,7 +62,7 @@ export default function PLChart({ data }) {
           <div className="text-right">
             <div className="text-xs text-slate-500">Current</div>
             <div className={`font-mono text-lg font-semibold ${isPositive ? 'text-positive' : 'text-negative'}`}>
-              {formatINR(currentPnl, true)}
+              {formatINR(latestPnl, true)}
             </div>
           </div>
         }
@@ -125,3 +150,6 @@ function CustomTooltip({ active, payload, label }) {
     </div>
   )
 }
+
+// Memoize to only re-render when data or currentPnl changes
+export default memo(PLChart)

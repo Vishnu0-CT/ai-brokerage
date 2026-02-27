@@ -1,19 +1,49 @@
+import { useMemo, memo } from 'react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import { formatINR } from '../../utils/formatters'
 import Card, { CardHeader } from '../common/Card'
 
-export default function DrawdownTracker({ historyData, dailyLossLimit = 25000 }) {
+function DrawdownTracker({ historyData, dailyLossLimit = 25000, currentPnl }) {
   if (!historyData || historyData.length === 0) return null
 
-  // Calculate drawdown at each point
-  const drawdownData = historyData.map((point, index) => {
-    const maxPnlSoFar = Math.max(...historyData.slice(0, index + 1).map(p => p.pnl ?? 0))
-    const drawdown = (point.pnl ?? 0) - maxPnlSoFar
-    return {
-      ...point,
-      drawdown: Math.min(0, drawdown),
+  // Merge historical data with current real-time P&L
+  const updatedHistoryData = useMemo(() => {
+    if (!currentPnl && currentPnl !== 0) return historyData
+
+    const now = new Date()
+    const currentTime = now.toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    })
+
+    const lastDataPoint = historyData[historyData.length - 1]
+    if (lastDataPoint && lastDataPoint.time === currentTime) {
+      // Update existing data point
+      return [
+        ...historyData.slice(0, -1),
+        { ...lastDataPoint, pnl: currentPnl }
+      ]
+    } else {
+      // Add new data point
+      return [
+        ...historyData,
+        { pnl: currentPnl, time: currentTime }
+      ]
     }
-  })
+  }, [historyData, currentPnl])
+
+  // Calculate drawdown at each point
+  const drawdownData = useMemo(() => {
+    return updatedHistoryData.map((point, index) => {
+      const maxPnlSoFar = Math.max(...updatedHistoryData.slice(0, index + 1).map(p => p.pnl ?? 0))
+      const drawdown = (point.pnl ?? 0) - maxPnlSoFar
+      return {
+        ...point,
+        drawdown: Math.min(0, drawdown),
+      }
+    })
+  }, [updatedHistoryData])
 
   const currentDrawdown = drawdownData[drawdownData.length - 1]?.drawdown || 0
   const maxDrawdown = Math.min(...drawdownData.map(d => d.drawdown))
@@ -125,3 +155,6 @@ function CustomTooltip({ active, payload, label }) {
     </div>
   )
 }
+
+// Memoize to only re-render when historyData, currentPnl, or dailyLossLimit changes
+export default memo(DrawdownTracker)

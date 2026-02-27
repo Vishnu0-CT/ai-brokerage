@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useApi } from '../hooks/useApi'
+import { useOptionChainWebSocket } from '../hooks/useOptionChainWebSocket'
+import { useWatchlistPriceStream } from '../hooks/useWatchlistPriceStream'
 import { getWatchlist } from '../api/watchlist'
-import { getExpiries, getOptionChain } from '../api/optionChain'
+import { getExpiries } from '../api/optionChain'
 import { createPosition } from '../api/positions'
 import { placeOrder } from '../api/orders'
 import { getHoldings } from '../api/portfolio'
@@ -28,10 +30,15 @@ export default function Trade() {
   const { data: watchlist, loading: watchlistLoading, error: watchlistError, refetch: refetchWatchlist } = useApi(() => getWatchlist(), [])
   const { data: holdings, refetch: refetchHoldings } = useApi(() => getHoldings(), [])
   const { data: expiries, loading: expiriesLoading } = useApi(() => getExpiries(), [])
-  const { data: optionChain, loading: chainLoading, error: chainError } = useApi(
-    () => getOptionChain(selectedSymbol?.symbol, selectedExpiry?.date),
-    [selectedSymbol?.symbol, selectedExpiry?.date],
-    { skip: !selectedSymbol || !selectedExpiry }
+
+  // Real-time price updates for watchlist
+  const { priceUpdates } = useWatchlistPriceStream(true)
+
+  // Use WebSocket for real-time option chain updates
+  const { data: optionChain, loading: chainLoading, error: chainError, connected: wsConnected } = useOptionChainWebSocket(
+    selectedSymbol?.symbol,
+    selectedExpiry?.date,
+    !!(selectedSymbol && selectedExpiry)
   )
 
   // Set default expiry when expiries load
@@ -41,15 +48,49 @@ export default function Trade() {
     }
   }, [expiries]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const filteredWatchlist = useMemo(() => {
+  // Update selectedSymbol with real-time prices
+  useEffect(() => {
+    if (selectedSymbol && priceUpdates[selectedSymbol.symbol]) {
+      const priceUpdate = priceUpdates[selectedSymbol.symbol]
+      setSelectedSymbol(prev => ({
+        ...prev,
+        price: priceUpdate.price,
+        change: priceUpdate.change,
+        change_percent: priceUpdate.change_percent,
+        high: priceUpdate.high ?? prev.high,
+        low: priceUpdate.low ?? prev.low,
+      }))
+    }
+  }, [priceUpdates, selectedSymbol?.symbol]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Merge watchlist with real-time price updates
+  const watchlistWithPrices = useMemo(() => {
     if (!watchlist) return []
-    if (!searchTerm) return watchlist
+    return watchlist.map(item => {
+      const priceUpdate = priceUpdates[item.symbol]
+      if (priceUpdate) {
+        return {
+          ...item,
+          price: priceUpdate.price,
+          change: priceUpdate.change,
+          change_percent: priceUpdate.change_percent,
+          high: priceUpdate.high ?? item.high,
+          low: priceUpdate.low ?? item.low,
+        }
+      }
+      return item
+    })
+  }, [watchlist, priceUpdates])
+
+  const filteredWatchlist = useMemo(() => {
+    if (!watchlistWithPrices) return []
+    if (!searchTerm) return watchlistWithPrices
     const term = searchTerm.toLowerCase()
-    return watchlist.filter(item =>
+    return watchlistWithPrices.filter(item =>
       item.symbol.toLowerCase().includes(term) ||
       item.type?.toLowerCase().includes(term)
     )
-  }, [watchlist, searchTerm])
+  }, [watchlistWithPrices, searchTerm])
 
   const handleSelectSymbol = (item) => {
     setSelectedSymbol(item)
@@ -129,7 +170,8 @@ export default function Trade() {
     }
   }
 
-  const spotPrice = selectedSymbol?.price || 0
+  // Use real-time spot price from WebSocket when available, fallback to watchlist price
+  const spotPrice = optionChain?.spot_price || selectedSymbol?.price || 0
 
   return (
     <div className="space-y-6">
@@ -251,6 +293,13 @@ export default function Trade() {
                       <span className={`font-mono text-sm ${getPnlColor(selectedSymbol.change || 0)}`}>
                         {selectedSymbol.change >= 0 ? '+' : ''}{selectedSymbol.change?.toFixed(2) || '0.00'} ({selectedSymbol.change_percent?.toFixed(2) || '0.00'}%)
                       </span>
+                      {/* Real-time connection indicator */}
+                      {tradeMode === 'OPTIONS' && (
+                        <span className="flex items-center gap-1.5 text-xs">
+                          <span className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-positive animate-pulse' : 'bg-slate-600'}`} />
+                          <span className="text-slate-500">{wsConnected ? 'Live' : 'Connecting...'}</span>
+                        </span>
+                      )}
                     </div>
                   </div>
 
