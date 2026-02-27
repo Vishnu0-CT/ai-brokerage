@@ -43,11 +43,14 @@ class ChatService:
         if settings.use_direct_anthropic:
             logger.info("Using direct Anthropic API")
             client_kwargs["api_key"] = settings.anthropic_direct_api_key
+            client_kwargs["base_url"] = "https://api.anthropic.com"  # Explicitly set to override env vars
         else:
             logger.info(f"Using proxy API at {settings.anthropic_base_url}")
             client_kwargs["api_key"] = settings.anthropic_api_key
             client_kwargs["base_url"] = settings.anthropic_base_url
+
         self._client = anthropic.AsyncAnthropic(**client_kwargs)
+        logger.info(f"DEBUG: Anthropic client initialized with base_url = {self._client.base_url}")
 
     async def load_history(self, conversation_id: str) -> list[dict]:
         """Load conversation history from the BE service and reconstruct Claude message format."""
@@ -194,7 +197,7 @@ class ChatService:
 
                 async with self._client.messages.stream(
                     model=settings.anthropic_model,
-                    max_tokens=4096,
+                    max_tokens=1024,  # Reduced from 4096 for faster responses
                     system=system_prompt,
                     tools=ALL_TOOLS,
                     messages=history,
@@ -247,7 +250,7 @@ class ChatService:
     async def _call_claude(self, messages: list[dict], system_prompt: str) -> Any:
         return await self._client.messages.create(
             model=settings.anthropic_model,
-            max_tokens=4096,
+            max_tokens=1024,  # Reduced from 4096 for faster responses
             system=system_prompt,
             tools=ALL_TOOLS,
             messages=messages,

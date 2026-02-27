@@ -16,77 +16,70 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.strategy import Strategy, StrategyVersion
 
 
-# Strategy Templates - 18 total, 6 categories
+# Strategy Templates - 14 total, 6 categories
 STRATEGY_TEMPLATES = [
-    # Category 1: Momentum Strategies
+    # Category 1: Price Action
     {
-        "id": "momentum_rsi_bounce",
-        "category": "momentum",
-        "title": "RSI Oversold Bounce",
-        "description": "Buy when RSI crosses above 30, indicating oversold conditions with potential reversal",
-        "template": "Buy NIFTY CE when RSI(14) crosses above 30 on 15-min chart and price is above VWAP. Exit when RSI crosses above 70 or price hits 2% profit. Stop loss at 1.5%.",
+        "id": "price_action_breakout_retest",
+        "category": "price_action",
+        "title": "Breakout Retest Entry",
+        "description": "Enter on price retesting previous resistance as new support with volume confirmation",
+        "template": "Buy NIFTY CE when price breaks above previous day high, pulls back to within 50 points of breakout level, and bounces with volume greater than 1.5x average on 15-min chart. Exit at 2% profit or if price breaks below entry by 0.5%. Stop loss at 1.5%.",
     },
     {
-        "id": "momentum_macd_crossover",
-        "category": "momentum",
-        "title": "MACD Crossover",
-        "description": "Enter on MACD line crossing above signal line with histogram turning positive",
-        "template": "Buy NIFTY CE when MACD line crosses above signal line on 15-min chart and histogram is positive. Exit when MACD crosses below signal or 3% profit. Stop loss at 2%.",
+        "id": "price_action_range_bound",
+        "category": "price_action",
+        "title": "Range Bound Trading",
+        "description": "Trade defined range between support and resistance levels",
+        "template": "Buy NIFTY CE when price touches lower range (previous day low) with volume surge. Sell NIFTY PE when price touches upper range (previous day high) with volume surge. Exit when price reaches middle of range or 1.5% profit. Stop loss at 1%.",
     },
     {
-        "id": "momentum_volume_breakout",
-        "category": "momentum",
+        "id": "price_action_consolidation_breakout",
+        "category": "price_action",
+        "title": "Consolidation Breakout",
+        "description": "Enter on breakout from narrow trading range with high volume",
+        "template": "Buy NIFTY CE when price breaks above previous 1-hour high with volume greater than 3x average after trading in 100-point range for at least 30 minutes. Exit at 2.5% profit or end of day. Stop loss at consolidation low.",
+    },
+    {
+        "id": "price_action_volume_breakout",
+        "category": "price_action",
         "title": "Volume Breakout",
         "description": "Enter on price breakout with volume surge above 2x average",
         "template": "Buy NIFTY CE when price breaks above previous day high with volume greater than 2x 20-period average. Exit at 2.5% profit or end of day. Stop loss at 1.5%.",
     },
-    
-    # Category 2: Mean Reversion
+
+    # Category 2: Open Interest Based
     {
-        "id": "reversion_bb_squeeze",
-        "category": "mean_reversion",
-        "title": "Bollinger Band Squeeze",
-        "description": "Enter when price touches lower Bollinger Band with RSI oversold",
-        "template": "Buy NIFTY CE when price touches lower Bollinger Band(20,2) and RSI(14) is below 35. Exit when price reaches middle band or 2% profit. Stop loss at 1.5%.",
+        "id": "oi_call_unwinding",
+        "category": "oi_based",
+        "title": "Call OI Unwinding",
+        "description": "Trade call writing unwinding indicating bullish momentum",
+        "template": "Buy NIFTY CE when price breaks above resistance and call OI at that strike decreases by more than 20% with volume surge. Exit at 2% profit or when price stalls at next resistance. Stop loss at 1.5%.",
     },
     {
-        "id": "reversion_rsi_overbought",
-        "category": "mean_reversion",
-        "title": "RSI Overbought Fade",
-        "description": "Sell when RSI reaches extreme overbought levels above 75",
-        "template": "Buy NIFTY PE when RSI(14) crosses below 75 from above on 15-min chart. Exit when RSI reaches 50 or 2% profit. Stop loss at 1.5%.",
+        "id": "oi_max_pain_fade",
+        "category": "oi_based",
+        "title": "Max Pain Reversion",
+        "description": "Trade price moving toward max pain level as expiry approaches",
+        "template": "On expiry day, if NIFTY spot is 200+ points away from max pain strike at 12 PM, buy ATM options in direction of max pain. Exit at 1% profit or 3 PM. Stop loss at 0.8%.",
     },
     {
-        "id": "reversion_vwap",
-        "category": "mean_reversion",
-        "title": "VWAP Reversion",
-        "description": "Trade price returning to VWAP after significant deviation",
-        "template": "Buy NIFTY CE when price is 1% below VWAP and RSI is below 40. Exit when price reaches VWAP or 1.5% profit. Stop loss at 1%.",
+        "id": "oi_pcr_extreme",
+        "category": "oi_based",
+        "title": "PCR Extreme Reversal",
+        "description": "Trade reversals when Put-Call Ratio reaches extreme levels",
+        "template": "Buy NIFTY CE when PCR ratio is above 1.5 indicating oversold conditions and price starts moving up. Buy NIFTY PE when PCR ratio is below 0.7 indicating overbought conditions and price starts moving down. Exit at 2% profit. Stop loss at 1.5%.",
     },
-    
-    # Category 3: Trend Following
+
+    # Category 3: Time-Based Options
     {
-        "id": "trend_supertrend",
-        "category": "trend_following",
-        "title": "SuperTrend Strategy",
-        "description": "Follow SuperTrend indicator for trend direction",
-        "template": "Buy NIFTY CE when SuperTrend(10,3) turns green on 15-min chart and price is above 20 EMA. Exit when SuperTrend turns red or 3% profit. Trailing stop at 1.5%.",
+        "id": "time_decay_weekly_theta",
+        "category": "time_decay",
+        "title": "Weekly Theta Harvest",
+        "description": "Sell options on Monday for time decay through Thursday",
+        "template": "Sell NIFTY strangle with strikes 300 points OTM on Monday when India VIX is above 13. Exit at 40% profit or Wednesday 3 PM. Stop loss at 80% of premium received.",
     },
-    {
-        "id": "trend_ma_crossover",
-        "category": "trend_following",
-        "title": "Moving Average Crossover",
-        "description": "Enter on 9 EMA crossing above 21 EMA",
-        "template": "Buy NIFTY CE when 9 EMA crosses above 21 EMA on 15-min chart. Exit when 9 EMA crosses below 21 EMA or 2.5% profit. Stop loss at 2%.",
-    },
-    {
-        "id": "trend_adx_strength",
-        "category": "trend_following",
-        "title": "ADX Trend Strength",
-        "description": "Enter strong trends when ADX is above 25",
-        "template": "Buy NIFTY CE when ADX(14) is above 25 and +DI is above -DI on 15-min chart. Exit when ADX falls below 20 or 3% profit. Stop loss at 2%.",
-    },
-    
+
     # Category 4: Intraday Scalping
     {
         "id": "scalp_orb",
@@ -96,20 +89,13 @@ STRATEGY_TEMPLATES = [
         "template": "Buy NIFTY CE when price breaks above first 15-min candle high after 9:30 AM. Exit at 1% profit or 10:30 AM. Stop loss at first candle low.",
     },
     {
-        "id": "scalp_vwap",
-        "category": "scalping",
-        "title": "VWAP Scalp",
-        "description": "Quick scalps around VWAP with tight stops",
-        "template": "Buy NIFTY CE when price bounces off VWAP with bullish candle on 5-min chart. Exit at 0.5% profit or 10 minutes. Stop loss at 0.3%.",
-    },
-    {
         "id": "scalp_gap_fill",
         "category": "scalping",
         "title": "Gap Fill Strategy",
         "description": "Trade gap fills in the first hour",
         "template": "Buy NIFTY PE when market gaps up more than 0.5% at open. Exit when gap is 50% filled or 30 minutes. Stop loss at 0.5%.",
     },
-    
+
     # Category 5: Options Selling
     {
         "id": "selling_iron_condor",
@@ -132,7 +118,7 @@ STRATEGY_TEMPLATES = [
         "description": "Sell calls against long futures position",
         "template": "Sell NIFTY CE at 200 points OTM against long futures. Exit at 80% profit or expiry. Roll if price approaches strike.",
     },
-    
+
     # Category 6: Event Based
     {
         "id": "event_earnings",
@@ -159,21 +145,21 @@ STRATEGY_TEMPLATES = [
 
 STRATEGY_CATEGORIES = [
     {
-        "id": "momentum",
-        "name": "Momentum",
-        "icon": "🚀",
+        "id": "price_action",
+        "name": "Price Action",
+        "icon": "📊",
         "color": "blue",
     },
     {
-        "id": "mean_reversion",
-        "name": "Mean Reversion",
-        "icon": "🔄",
+        "id": "oi_based",
+        "name": "Open Interest Analysis",
+        "icon": "🔍",
         "color": "purple",
     },
     {
-        "id": "trend_following",
-        "name": "Trend Following",
-        "icon": "📈",
+        "id": "time_decay",
+        "name": "Time-Based Options",
+        "icon": "⏰",
         "color": "green",
     },
     {
