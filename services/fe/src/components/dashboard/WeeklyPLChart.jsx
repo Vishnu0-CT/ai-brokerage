@@ -1,8 +1,9 @@
+import { memo } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from 'recharts'
 import { formatINR } from '../../utils/formatters'
 import Card, { CardHeader } from '../common/Card'
 
-export default function WeeklyPLChart({ data }) {
+function WeeklyPLChart({ data }) {
   if (!data || data.length === 0) return null
 
   const totalPnl = data.reduce((sum, d) => sum + d.pnl, 0)
@@ -111,3 +112,6 @@ function CustomTooltip({ active, payload, label }) {
     </div>
   )
 }
+
+// Memoize to prevent re-renders when Dashboard updates with real-time prices
+export default memo(WeeklyPLChart)

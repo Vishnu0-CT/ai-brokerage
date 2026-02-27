@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useApi } from '../../hooks/useApi'
+import { useWatchlistPriceStream } from '../../hooks/useWatchlistPriceStream'
 import { getHoldings } from '../../api/portfolio'
 import { exitPosition } from '../../api/positions'
 import { formatINR, formatPercent, getPnlColor } from '../../utils/formatters'
@@ -9,14 +10,46 @@ import ErrorMessage from '../common/ErrorMessage'
 
 export default function PositionsTable() {
   const { data: positions, loading, error, refetch } = useApi(() => getHoldings(), [])
+  const { priceUpdates } = useWatchlistPriceStream(true)
   const [exitingPosition, setExitingPosition] = useState(null)
   const [showExitModal, setShowExitModal] = useState(false)
   const [exitSuccess, setExitSuccess] = useState(null)
 
+  // Merge positions with real-time price updates
+  const positionsWithRealTimePrices = useMemo(() => {
+    if (!positions) return []
+
+    return positions.map(position => {
+      // Extract base symbol from option position (e.g., "NIFTY 24000 CE" -> "NIFTY")
+      const baseSymbol = position.symbol.split(' ')[0]
+      const priceUpdate = priceUpdates[baseSymbol]
+
+      if (priceUpdate && priceUpdate.price) {
+        // For options, we'd need option premium which WebSocket doesn't provide
+        // For now, update only if it's a direct match (spot positions)
+        if (position.symbol === baseSymbol) {
+          const currentPrice = priceUpdate.price
+          const isLong = position.side === 'BUY' || position.side === 'long'
+          const pnl = (currentPrice - position.avg_price) * position.quantity * (isLong ? 1 : -1)
+          const pnlPct = ((currentPrice - position.avg_price) / position.avg_price) * 100 * (isLong ? 1 : -1)
+
+          return {
+            ...position,
+            current_price: currentPrice,
+            unrealized_pnl: pnl,
+            pnl_pct: pnlPct,
+          }
+        }
+      }
+
+      return position
+    })
+  }, [positions, priceUpdates])
+
   if (loading) return <TableSkeleton />
   if (error) return <ErrorMessage error={error} onRetry={refetch} />
 
-  const positionList = positions || []
+  const positionList = positionsWithRealTimePrices
 
   const handleExitClick = (position) => {
     setExitingPosition(position)

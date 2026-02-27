@@ -1,4 +1,6 @@
-export default function RiskGauge({ label, value, max, unit, status, description }) {
+import { memo } from 'react'
+
+function RiskGauge({ label, value, max, unit, status, description }) {
   const percentage = Math.min((value / max) * 100, 100)
 
   const getStatusColor = () => {
@@ -57,3 +59,6 @@ export default function RiskGauge({ label, value, max, unit, status, description
     </div>
   )
 }
+
+// Memoize to only re-render when props change
+export default memo(RiskGauge)

@@ -1,7 +1,8 @@
+import { memo } from 'react'
 import { formatINR, formatLakhsCrores, getPnlColor } from '../../utils/formatters'
 import { StatCard } from '../common/Card'
 
-export default function PortfolioSummary({ balance }) {
+function PortfolioSummary({ balance }) {
   if (!balance) return null
 
   const pnlColor = getPnlColor(balance.total_pnl)
@@ -55,3 +56,6 @@ export default function PortfolioSummary({ balance }) {
     </div>
   )
 }
+
+// Memoize to only re-render when balance changes
+export default memo(PortfolioSummary)

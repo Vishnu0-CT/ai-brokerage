@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useApi } from '../hooks/useApi'
+import { useWatchlistPriceStream } from '../hooks/useWatchlistPriceStream'
 import { getBalance, getHistory, updateDailyLossLimit } from '../api/portfolio'
+import { getHoldings } from '../api/portfolio'
 import { getRiskMetrics } from '../api/alerts'
 import { getWeeklyPnl } from '../api/trades'
 import PortfolioSummary from '../components/dashboard/PortfolioSummary'
@@ -13,16 +15,54 @@ import ErrorMessage from '../components/common/ErrorMessage'
 
 export default function Dashboard() {
   const { data: balance, loading: balanceLoading, error: balanceError, refetch: refetchBalance } = useApi(() => getBalance(), [])
+  const { data: positions } = useApi(() => getHoldings(), [])
   const { data: historyData } = useApi(() => getHistory('1d'), [])
   const { data: weeklyData } = useApi(() => getWeeklyPnl(), [])
   const { data: riskMetrics } = useApi(() => getRiskMetrics(), [])
+  const { priceUpdates } = useWatchlistPriceStream(true)
 
   const [editingLimit, setEditingLimit] = useState(false)
   const [limitInput, setLimitInput] = useState('')
   const [limitSaving, setLimitSaving] = useState(false)
 
-  const dailyLossLimit = balance?.daily_loss_limit || 25000
-  const pnl = balance?.total_pnl || 0
+  // Recalculate balance with real-time prices
+  const balanceWithRealTimePrices = useMemo(() => {
+    if (!balance || !positions || Object.keys(priceUpdates).length === 0) {
+      return balance
+    }
+
+    // Calculate total unrealized P&L from positions with real-time prices
+    let totalUnrealizedPnl = 0
+    positions.forEach(position => {
+      const baseSymbol = position.symbol.split(' ')[0]
+      const priceUpdate = priceUpdates[baseSymbol]
+
+      if (priceUpdate && priceUpdate.price && position.symbol === baseSymbol) {
+        // This is a spot position with real-time price
+        const currentPrice = priceUpdate.price
+        const isLong = position.side === 'BUY' || position.side === 'long'
+        const pnl = (currentPrice - position.avg_price) * position.quantity * (isLong ? 1 : -1)
+        totalUnrealizedPnl += pnl
+      } else {
+        // Use existing unrealized P&L for positions without real-time updates
+        totalUnrealizedPnl += position.unrealized_pnl || 0
+      }
+    })
+
+    // Update balance with new total P&L
+    const realizedPnl = balance.realized_pnl || 0
+    const newTotalPnl = realizedPnl + totalUnrealizedPnl
+    const newTotalValue = balance.initial_cash + newTotalPnl
+
+    return {
+      ...balance,
+      total_pnl: newTotalPnl,
+      total_value: newTotalValue,
+    }
+  }, [balance, positions, priceUpdates])
+
+  const dailyLossLimit = balanceWithRealTimePrices?.daily_loss_limit || 25000
+  const pnl = balanceWithRealTimePrices?.total_pnl || 0
   const bufferRemaining = dailyLossLimit - Math.abs(Math.min(0, pnl))
   const bufferPercent = (bufferRemaining / dailyLossLimit) * 100
 
@@ -131,12 +171,12 @@ export default function Dashboard() {
       ) : balanceError ? (
         <ErrorMessage error={balanceError} onRetry={refetchBalance} />
       ) : (
-        <PortfolioSummary balance={balance} />
+        <PortfolioSummary balance={balanceWithRealTimePrices} />
       )}
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <PLChart data={historyData} />
+        <PLChart data={historyData} currentPnl={balanceWithRealTimePrices?.total_pnl} />
         <WeeklyPLChart data={weeklyData} />
       </div>
 
@@ -154,7 +194,7 @@ export default function Dashboard() {
         <QuickAction
           icon={<svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" strokeLinecap="round" strokeLinejoin="round" /></svg>}
           label="Capital"
-          value={formatLakhsCrores(balance?.initial_cash || 0)}
+          value={formatLakhsCrores(balanceWithRealTimePrices?.initial_cash || 0)}
           sublabel="Total deployed"
         />
         <QuickAction

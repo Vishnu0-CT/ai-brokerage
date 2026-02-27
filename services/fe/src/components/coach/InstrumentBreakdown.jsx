@@ -1,17 +1,20 @@
+import { memo } from 'react'
 import { formatINR } from '../../utils/formatters'
 import Card, { CardHeader } from '../common/Card'
 
-export default function InstrumentBreakdown({ data }) {
+function InstrumentBreakdown({ data }) {
   if (!data || data.length === 0) return null
 
   const sorted = [...data].sort((a, b) => b.avgPnl - a.avgPnl)
   const maxPnl = Math.max(...data.map(d => Math.abs(d.avgPnl)))
 
+  const hasLiveData = data.some(d => d.hasOpenPositions)
+
   return (
     <Card>
       <CardHeader
         title="Performance by Instrument"
-        subtitle="Average P&L per trade"
+        subtitle={hasLiveData ? "Average P&L per trade + live positions" : "Average P&L per trade"}
       />
 
       <div className="space-y-4 mt-4">
@@ -31,13 +34,19 @@ export default function InstrumentBreakdown({ data }) {
                     {index + 1}
                   </span>
                   <span className="text-sm font-medium text-slate-200">{item.instrument}</span>
+                  {item.hasOpenPositions && (
+                    <div className="flex items-center gap-1">
+                      <div className="w-1.5 h-1.5 rounded-full bg-accent pulse-live" />
+                      <span className="text-xs text-slate-500">Live</span>
+                    </div>
+                  )}
                 </div>
                 <div className="text-right">
                   <div className={`font-mono text-sm font-semibold ${isPositive ? 'text-positive' : 'text-negative'}`}>
                     {formatINR(item.avgPnl, true)}
                   </div>
                   <div className="text-xs text-slate-500">
-                    {item.winRate.toFixed(0)}% win {'\u2022'} {item.trades} trades
+                    {item.trades > 0 ? `${item.winRate.toFixed(0)}% win ${'\u2022'} ${item.trades} trades` : 'Open positions'}
                   </div>
                 </div>
               </div>
@@ -55,3 +64,6 @@ export default function InstrumentBreakdown({ data }) {
     </Card>
   )
 }
+
+// Memoize to prevent unnecessary re-renders
+export default memo(InstrumentBreakdown)

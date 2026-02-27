@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { getSeverityColors, timeAgo } from '../../utils/formatters'
 
 const alertIcons = {
@@ -31,7 +32,7 @@ const alertIcons = {
   ),
 }
 
-export default function AlertCard({ alert, onDismiss }) {
+function AlertCard({ alert, onDismiss }) {
   const colors = getSeverityColors(alert.severity)
   const Icon = alertIcons[alert.type] || alertIcons.OVERTRADING
 
@@ -104,3 +105,6 @@ export default function AlertCard({ alert, onDismiss }) {
     </div>
   )
 }
+
+// Memoize to prevent unnecessary re-renders
+export default memo(AlertCard)

@@ -19,13 +19,68 @@ logger = logging.getLogger(__name__)
 
 # Indian market seed prices (from tradeai niftyHistoricalData)
 SEED_PRICES = {
-    "NIFTY": 26478.50,
-    "BANKNIFTY": 57723.00,    # Nifty * 2.18
-    "RELIANCE": 1280.00,
-    "INFY": 1550.00,
-    "TCS": 3800.00,
+    # Indices
+    "NIFTY": 25496.55,
+    "BANKNIFTY": 61187.70,
+    "FINNIFTY": 28309.85,
+    
+    # Stocks - Top Weightage
+    "RELIANCE": 1423.90,
+    "HDFCBANK": 915.60,
+    "INFY": 1407.30,
+    "TCS": 2738.80,
+    "ICICIBANK": 1401.80,
+    "SBIN": 1224.90,
+    "TATAMOTORS": 735.00,
+    
+    # Banking & Finance
+    "AXISBANK": 1387.10,
+    "KOTAKBANK": 428.90,
+    "BAJFINANCE": 1017.05,
+    
+    # IT Sector
+    "WIPRO": 216.76,
+    "HCLTECH": 1489.30,
+    "TECHM": 1529.30,
+    
+    # Auto Sector
+    "M&M": 3474.10,
+    "MARUTI": 12800.00,
+    "BAJAJ-AUTO": 9759.50,
+    
+    # Pharma Sector
+    "SUNPHARMA": 1820.00,
+    "DRREDDY": 1265.90,
+    "CIPLA": 1346.20,
+    
+    # FMCG Sector
+    "ITC": 325.50,
+    "HINDUNILVR": 2279.30,
+    "BRITANNIA": 5200.00,
+    
+    # Energy Sector
+    "ONGC": 274.65,
+    "BPCL": 320.00,
+    "POWERGRID": 298.50,
+    
+    # Metals & Mining
+    "TATASTEEL": 203.30,
+    "HINDALCO": 890.30,
+    "JSWSTEEL": 960.00,
+    
+    # Telecom
+    "BHARTIARTL": 2029.60,
+    
+    # Conglomerates & Infrastructure
+    "ADANIENT": 2204.90,
+    "LT": 3650.00,
+    "ULTRACEMCO": 12943.00,
+    
+    # Additional Popular Stocks
+    "ASIANPAINT": 2439.20,
+    "NTPC": 370.00,
+    "COALINDIA": 421.60,
 }
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
