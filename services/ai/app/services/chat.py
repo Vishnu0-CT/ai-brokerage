@@ -35,9 +35,16 @@ class ChatService:
         self.be: BEClient = be_client
         self._dispatcher = ToolDispatcher(be_client)
         client_kwargs = {"http_client": httpx.AsyncClient(event_hooks=EVENT_HOOKS)}
+
+        # Debug logging
+        logger.info(f"DEBUG: use_direct_anthropic = {settings.use_direct_anthropic}")
+        logger.info(f"DEBUG: anthropic_direct_api_key = {settings.anthropic_direct_api_key[:20]}..." if settings.anthropic_direct_api_key else "DEBUG: anthropic_direct_api_key = None")
+
         if settings.use_direct_anthropic:
+            logger.info("Using direct Anthropic API")
             client_kwargs["api_key"] = settings.anthropic_direct_api_key
         else:
+            logger.info(f"Using proxy API at {settings.anthropic_base_url}")
             client_kwargs["api_key"] = settings.anthropic_api_key
             client_kwargs["base_url"] = settings.anthropic_base_url
         self._client = anthropic.AsyncAnthropic(**client_kwargs)
