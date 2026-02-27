@@ -35,9 +35,19 @@ class PriceUnavailableError(Exception):
 
 
 class DailyLossLimitBreachedError(Exception):
-    def __init__(self, current_loss: float, limit: float):
+    def __init__(self, current_loss: float, limit: float, positions_closed: int = 0, square_off_pnl: float = 0):
         self.current_loss = current_loss
         self.limit = limit
-        super().__init__(
-            f"Daily loss limit breached: current loss ₹{current_loss:,.0f} exceeds limit ₹{limit:,.0f}. Trading halted for today."
-        )
+        self.positions_closed = positions_closed
+        self.square_off_pnl = square_off_pnl
+        if positions_closed > 0:
+            msg = (
+                f"Daily loss limit breached: loss ₹{current_loss:,.0f} exceeds ₹{limit:,.0f}. "
+                f"{positions_closed} position(s) squared off (realized P&L: ₹{square_off_pnl:,.0f})."
+            )
+        else:
+            msg = (
+                f"Daily loss limit breached: loss ₹{current_loss:,.0f} exceeds ₹{limit:,.0f}. "
+                f"No open positions to square off."
+            )
+        super().__init__(msg)

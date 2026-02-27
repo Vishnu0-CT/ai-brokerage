@@ -18,7 +18,7 @@ export default function Dashboard() {
   const { data: positions } = useApi(() => getHoldings(), [])
   const { data: historyData } = useApi(() => getHistory('1d'), [])
   const { data: weeklyData } = useApi(() => getWeeklyPnl(), [])
-  const { data: riskMetrics } = useApi(() => getRiskMetrics(), [])
+  const { data: riskMetrics, refetch: refetchRiskMetrics } = useApi(() => getRiskMetrics(), [])
   const { priceUpdates } = useWatchlistPriceStream(true)
 
   const [editingLimit, setEditingLimit] = useState(false)
@@ -28,7 +28,8 @@ export default function Dashboard() {
   // Recalculate balance with real-time prices
   const balanceWithRealTimePrices = useMemo(() => {
     if (!balance || !positions || Object.keys(priceUpdates).length === 0) {
-      return balance
+      const staticUnrealized = positions?.reduce((sum, p) => sum + (p.unrealized_pnl || 0), 0) ?? 0
+      return balance ? { ...balance, unrealized_pnl: staticUnrealized } : balance
     }
 
     // Calculate total unrealized P&L from positions with real-time prices
@@ -58,13 +59,14 @@ export default function Dashboard() {
       ...balance,
       total_pnl: newTotalPnl,
       total_value: newTotalValue,
+      unrealized_pnl: totalUnrealizedPnl,
     }
   }, [balance, positions, priceUpdates])
 
   // Use risk metrics for daily loss limit, falling back to balance
   const dailyLossLimit = riskMetrics?.daily_loss_limit || balanceWithRealTimePrices?.daily_loss_limit || 25000
-  const todayPnl = riskMetrics?.today_stats?.pnl ?? balanceWithRealTimePrices?.total_pnl ?? 0
-  const bufferRemaining = dailyLossLimit - Math.abs(Math.min(0, todayPnl))
+  const unrealizedPnl = balanceWithRealTimePrices?.unrealized_pnl ?? 0
+  const bufferRemaining = dailyLossLimit - Math.abs(Math.min(0, unrealizedPnl))
   const bufferPercent = (bufferRemaining / dailyLossLimit) * 100
 
   const handleLimitSave = async () => {
@@ -74,6 +76,7 @@ export default function Dashboard() {
     try {
       await updateDailyLossLimit(value)
       refetchBalance()
+      refetchRiskMetrics()
       setEditingLimit(false)
     } catch (err) {
       console.error('Failed to update limit:', err)
