@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -12,6 +13,8 @@ from app.models.order import Transaction
 from app.models.portfolio import Holding, PortfolioConfig
 from app.models.trade import Trade
 from app.services.exceptions import DailyLossLimitBreachedError, InsufficientFundsError, InsufficientHoldingsError
+
+logger = logging.getLogger(__name__)
 
 
 class OrderService:
@@ -38,7 +41,7 @@ class OrderService:
             raise ValueError(f"Invalid side: {side}")
 
     async def _check_daily_loss_limit(self, user_id: uuid.UUID) -> None:
-        """Block buying if realized + unrealized P&L has breached the daily loss limit."""
+        """Square off all positions if realized + unrealized P&L has breached the daily loss limit."""
         cfg_result = await self._session.execute(
             select(PortfolioConfig).where(PortfolioConfig.user_id == user_id)
         )
@@ -97,7 +100,35 @@ class OrderService:
         total_pnl = realized_pnl + unrealized_pnl
         current_loss = abs(min(0, total_pnl))
         if current_loss >= daily_limit:
-            raise DailyLossLimitBreachedError(current_loss, daily_limit)
+            logger.warning(
+                "Daily loss limit breached for user %s: loss ₹%.0f >= limit ₹%.0f — squaring off all positions",
+                user_id, current_loss, daily_limit,
+            )
+            results = await self._square_off_all(user_id)
+            closed = [r for r in results if r.get("success")]
+            total_exit_pnl = sum(r["trade"]["pnl"] for r in closed)
+            raise DailyLossLimitBreachedError(
+                current_loss, daily_limit,
+                positions_closed=len(closed),
+                square_off_pnl=total_exit_pnl,
+            )
+
+    async def _square_off_all(self, user_id: uuid.UUID) -> list[dict]:
+        """Exit all open holdings as a risk management action."""
+        holdings_result = await self._session.execute(
+            select(Holding).where(Holding.user_id == user_id)
+        )
+        holdings = holdings_result.scalars().all()
+
+        results = []
+        for h in holdings:
+            try:
+                result = await self.exit_holding(user_id, h.symbol)
+                results.append(result)
+            except Exception:
+                logger.exception("Failed to exit %s during square-off", h.symbol)
+                results.append({"success": False, "symbol": h.symbol})
+        return results
 
     async def _buy(
         self, user_id: uuid.UUID, symbol: str,

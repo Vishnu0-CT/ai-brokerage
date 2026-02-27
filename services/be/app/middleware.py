@@ -32,7 +32,11 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(DailyLossLimitBreachedError)
     async def daily_loss_limit_breached(request: Request, exc: DailyLossLimitBreachedError):
-        return JSONResponse(status_code=403, content={"error": str(exc)})
+        return JSONResponse(status_code=403, content={
+            "error": str(exc),
+            "positions_closed": exc.positions_closed,
+            "square_off_pnl": exc.square_off_pnl,
+        })
 
     @app.exception_handler(PriceUnavailableError)
     async def price_unavailable(request: Request, exc: PriceUnavailableError):
