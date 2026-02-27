@@ -99,17 +99,11 @@ export default function RiskMonitor() {
   const activeAlertCount = alerts?.filter(a => !a.dismissed)?.length || 0
   const criticalCount = alerts?.filter(a => a.severity === 'critical')?.length || 0
 
-  // Extract risk metrics safely — API returns nested objects for drawdown, trade_velocity, concentration
-  const dailyLossLimit = riskMetrics?.daily_loss_limit || balance?.daily_loss_limit || 25000
-
-  // Use real-time drawdown calculation
-  const drawdownValue = Math.min(0, realTimePnl) // Drawdown is negative P&L
-
   // Extract risk metrics safely — API returns nested objects for drawdown, trade_velocity, concentration, margin
+  const dailyLossLimit = riskMetrics?.daily_loss_limit || balance?.daily_loss_limit || 25000
   const drawdown = riskMetrics?.drawdown || {}
   const drawdownPct = drawdown.percent || 0
-  const drawdownValue = drawdown.current || 0
-  const dailyLossLimit = riskMetrics?.daily_loss_limit || 25000
+  const drawdownValue = drawdown.current || Math.min(0, realTimePnl)
   const velocity = riskMetrics?.trade_velocity || {}
   const tradeVelocity = typeof velocity === 'number' ? velocity : (velocity.count || 0)
   const maxTradesPerDay = (typeof velocity === 'object' && velocity.avg_per_day ? Math.round(velocity.avg_per_day * 2) : riskMetrics?.max_trades_per_day) || 20
