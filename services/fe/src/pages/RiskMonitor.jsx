@@ -105,6 +105,11 @@ export default function RiskMonitor() {
   // Use real-time drawdown calculation
   const drawdownValue = Math.min(0, realTimePnl) // Drawdown is negative P&L
 
+  // Extract risk metrics safely — API returns nested objects for drawdown, trade_velocity, concentration, margin
+  const drawdown = riskMetrics?.drawdown || {}
+  const drawdownPct = drawdown.percent || 0
+  const drawdownValue = drawdown.current || 0
+  const dailyLossLimit = riskMetrics?.daily_loss_limit || 25000
   const velocity = riskMetrics?.trade_velocity || {}
   const tradeVelocity = typeof velocity === 'number' ? velocity : (velocity.count || 0)
   const maxTradesPerDay = (typeof velocity === 'object' && velocity.avg_per_day ? Math.round(velocity.avg_per_day * 2) : riskMetrics?.max_trades_per_day) || 20
@@ -113,9 +118,12 @@ export default function RiskMonitor() {
   const concentrationPct = maxConcentration
   const concentrationMax = 100
 
-  // Use real-time margin utilization
-  const marginUsed = marginUtilization
-  const marginMax = 100
+  // Margin data comes from riskMetrics.margin
+  const margin = riskMetrics?.margin || {}
+  const marginUsedValue = margin.used || 0
+  const marginTotalValue = margin.total || 0
+  // Use pre-calculated utilization percentage from API
+  const marginUtilizationPct = margin.utilization_pct || 0
 
   // Signal data
   const signalValue = signal?.signal || signal?.value || 'NEUTRAL'
@@ -204,15 +212,17 @@ export default function RiskMonitor() {
           />
           <RiskGauge
             label="Margin Utilization"
-            value={marginUsed}
-            max={marginMax}
+            value={Math.min(Math.round(marginUtilizationPct), 100)}
+            max={100}
             unit="%"
             status={
-              marginUsed > 90 ? 'critical' :
-              marginUsed > 70 ? 'warning' :
-              marginUsed > 50 ? 'elevated' : 'normal'
+              marginUtilizationPct > 500 ? 'critical' :
+              marginUtilizationPct > 300 ? 'warning' :
+              marginUtilizationPct > 100 ? 'elevated' : 'normal'
             }
-            description="Deployed margin vs available"
+            description={marginUtilizationPct > 100
+              ? `${(marginUtilizationPct / 100).toFixed(1)}x leverage (₹${(marginUsedValue / 100000).toFixed(1)}L)`
+              : `₹${(marginUsedValue / 100000).toFixed(1)}L of ₹${(marginTotalValue / 100000).toFixed(1)}L`}
           />
         </div>
       )}

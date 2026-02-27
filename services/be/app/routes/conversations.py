@@ -73,6 +73,25 @@ async def get_conversation(
     }
 
 
+@router.put("/{conversation_id}")
+async def update_conversation(
+    conversation_id: uuid.UUID,
+    body: ConversationCreate,
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.execute(
+        select(Conversation).where(Conversation.id == conversation_id)
+    )
+    conv = result.scalar_one_or_none()
+    if conv is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    conv.title = body.title
+    await session.commit()
+    await session.refresh(conv)
+    return {"id": str(conv.id), "title": conv.title, "created_at": conv.created_at.isoformat()}
+
+
 @router.delete("/{conversation_id}")
 async def delete_conversation(
     conversation_id: uuid.UUID,
@@ -99,7 +118,8 @@ async def save_message(
     result = await session.execute(
         select(Conversation).where(Conversation.id == conversation_id)
     )
-    if result.scalar_one_or_none() is None:
+    conv = result.scalar_one_or_none()
+    if conv is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     msg = Message(
@@ -109,6 +129,15 @@ async def save_message(
         tool_data=body.tool_data,
     )
     session.add(msg)
+    
+    # Auto-generate title from first user message if title is generic
+    if body.role == "user" and conv.title in ["Assistant", "New Chat", "Coach"]:
+        # Use first 50 characters of the message as title
+        new_title = body.content[:50].strip()
+        if len(body.content) > 50:
+            new_title += "..."
+        conv.title = new_title
+    
     await session.commit()
     await session.refresh(msg)
 

@@ -9,3 +9,5 @@ build/
 .pytest_cache/
 
 .idea/
+node_modules/
+.vite/

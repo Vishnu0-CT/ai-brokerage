@@ -34,11 +34,13 @@ class ChatService:
 
         self.be: BEClient = be_client
         self._dispatcher = ToolDispatcher(be_client)
-        self._client = anthropic.AsyncAnthropic(
-            api_key=settings.anthropic_api_key,
-            base_url=settings.anthropic_base_url,
-            http_client=httpx.AsyncClient(event_hooks=EVENT_HOOKS),
-        )
+        client_kwargs = {"http_client": httpx.AsyncClient(event_hooks=EVENT_HOOKS)}
+        if settings.use_direct_anthropic:
+            client_kwargs["api_key"] = settings.anthropic_direct_api_key
+        else:
+            client_kwargs["api_key"] = settings.anthropic_api_key
+            client_kwargs["base_url"] = settings.anthropic_base_url
+        self._client = anthropic.AsyncAnthropic(**client_kwargs)
 
     async def load_history(self, conversation_id: str) -> list[dict]:
         """Load conversation history from the BE service and reconstruct Claude message format."""

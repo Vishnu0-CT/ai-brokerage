@@ -1,4 +1,6 @@
 import { NavLink } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { getUnreadCount } from '../../api/notifications'
 
 const navItems = [
   {
@@ -22,18 +24,6 @@ const navItems = [
         <path d="M17 7h4v4" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     ),
-  },
-  {
-    path: '/assistant',
-    label: 'AI Assistant',
-    icon: (
-      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M12 2a10 10 0 0 1 10 10c0 5.523-4.477 10-10 10a10 10 0 0 1-10-10A10 10 0 0 1 12 2z" />
-        <circle cx="12" cy="12" r="3" />
-        <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
-      </svg>
-    ),
-    highlight: true,
   },
   {
     path: '/strategy',
@@ -68,7 +58,25 @@ const navItems = [
   },
 ]
 
-export default function Nav() {
+export default function Nav({ onNotificationClick }) {
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  useEffect(() => {
+    loadUnreadCount()
+    // Poll for updates every 30 seconds
+    const interval = setInterval(loadUnreadCount, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const loadUnreadCount = async () => {
+    try {
+      const data = await getUnreadCount()
+      setUnreadCount(data.count)
+    } catch (error) {
+      console.error('Failed to load unread count:', error)
+    }
+  }
+
   return (
     <nav className="w-56 bg-navy-800 border-r border-navy-600 flex flex-col py-4">
       <div className="flex-1 px-3 space-y-1">
@@ -102,7 +110,25 @@ export default function Nav() {
       </div>
 
       {/* Bottom section */}
-      <div className="px-3 pt-4 border-t border-navy-600 mt-4">
+      <div className="px-3 pt-4 border-t border-navy-600 mt-4 space-y-2">
+        {/* Notifications button */}
+        <button
+          onClick={onNotificationClick}
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-navy-700/50 transition-all duration-200 group relative"
+        >
+          <span className="group-hover:scale-110 transition-transform">
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+          <span className="font-medium text-sm">Notifications</span>
+          {unreadCount > 0 && (
+            <span className="ml-auto w-5 h-5 flex items-center justify-center text-[10px] font-bold bg-accent text-navy-900 rounded-full">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
+        </button>
+
         <div className="px-4 py-3 rounded-lg bg-navy-700/30">
           <div className="text-xs text-slate-500 mb-1">Account</div>
           <div className="text-sm font-medium text-slate-300">ClearTrade</div>

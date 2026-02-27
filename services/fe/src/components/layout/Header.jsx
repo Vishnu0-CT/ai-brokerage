@@ -4,6 +4,7 @@ import { useWatchlistPriceStream } from '../../hooks/useWatchlistPriceStream'
 import { getBalance } from '../../api/portfolio'
 import { getHoldings } from '../../api/portfolio'
 import { getWatchlist } from '../../api/watchlist'
+import { getUnreadCount } from '../../api/notifications'
 import { formatINR, getPnlColor } from '../../utils/formatters'
 
 function MarketTicker({ data }) {
@@ -43,11 +44,12 @@ function LiveClock() {
   )
 }
 
-export default function Header() {
+export default function Header({ onToggleAssistant, isAssistantOpen = false, onNotificationClick }) {
   const { data: balance } = useApi(() => getBalance(), [])
   const { data: positions } = useApi(() => getHoldings(), [])
   const { data: watchlist } = useApi(() => getWatchlist(), [])
   const { priceUpdates } = useWatchlistPriceStream(true)
+  const [unreadCount, setUnreadCount] = useState(0)
 
   // Merge watchlist with real-time prices
   const watchlistWithPrices = useMemo(() => {
@@ -94,6 +96,21 @@ export default function Header() {
 
   const pnlColor = getPnlColor(realTimePnl)
 
+  useEffect(() => {
+    loadUnreadCount()
+    const interval = setInterval(loadUnreadCount, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const loadUnreadCount = async () => {
+    try {
+      const data = await getUnreadCount()
+      setUnreadCount(data.count)
+    } catch (error) {
+      console.error('Failed to load unread count:', error)
+    }
+  }
+
   // Extract index tickers from watchlist (NIFTY, BANKNIFTY, VIX)
   const nifty = watchlistWithPrices?.find(w => w.symbol === 'NIFTY' || w.symbol === 'NIFTY 50')
   const bankNifty = watchlistWithPrices?.find(w => w.symbol === 'BANKNIFTY' || w.symbol === 'BANK NIFTY')
@@ -121,7 +138,7 @@ export default function Header() {
         <MarketTicker data={vix} />
       </div>
 
-      {/* Right side - Clock and P&L */}
+      {/* Right side - Clock, P&L, and AI Assistant Button */}
       <div className="flex items-center gap-6">
         <LiveClock />
 
@@ -131,6 +148,64 @@ export default function Header() {
             {formatINR(realTimePnl, true)}
           </span>
         </div>
+
+        {/* Notification Bell */}
+        <button
+          onClick={onNotificationClick}
+          className="relative p-2 rounded-lg hover:bg-navy-700 text-slate-400 hover:text-slate-200 transition-colors"
+        >
+          <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          {unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 w-5 h-5 flex items-center justify-center text-[10px] font-bold bg-accent text-navy-900 rounded-full">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
+        </button>
+
+        {/* AI Assistant Button */}
+        <button
+          onClick={onToggleAssistant}
+          className={`relative flex items-center gap-2.5 px-5 py-2.5 rounded-xl shadow-lg transition-all duration-300 group overflow-hidden ${
+            isAssistantOpen
+              ? 'bg-gradient-to-r from-accent-dark to-accent shadow-accent/40 scale-95'
+              : 'bg-gradient-to-r from-accent to-accent-dark hover:from-accent-dark hover:to-accent shadow-accent/20 hover:shadow-accent/40'
+          }`}
+        >
+          {/* Animated background glow */}
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
+          
+          <svg 
+            className={`w-5 h-5 text-navy-900 transition-transform duration-500 ${
+              isAssistantOpen ? 'rotate-180' : 'group-hover:rotate-180'
+            }`} 
+            viewBox="0 0 24 24" 
+            fill="none" 
+            stroke="currentColor" 
+            strokeWidth="2.5"
+          >
+            <path d="M12 2a10 10 0 0 1 10 10c0 5.523-4.477 10-10 10a10 10 0 0 1-10-10A10 10 0 0 1 12 2z" />
+            <circle cx="12" cy="12" r="3" fill="currentColor" />
+            <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+          </svg>
+          <span className="text-sm font-bold text-navy-900 tracking-wide relative z-10">
+            {isAssistantOpen ? 'Close Assistant' : 'AI Assistant'}
+          </span>
+          
+          {/* Pulse indicator - only show when not open */}
+          {!isAssistantOpen && (
+            <>
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-positive rounded-full animate-ping" />
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-positive rounded-full" />
+            </>
+          )}
+          
+          {/* Active indicator - show when open */}
+          {isAssistantOpen && (
+            <div className="absolute -top-1 -right-1 w-3 h-3 bg-navy-900 rounded-full border-2 border-accent" />
+          )}
+        </button>
 
         {/* Live indicator */}
         <div className="flex items-center gap-2">

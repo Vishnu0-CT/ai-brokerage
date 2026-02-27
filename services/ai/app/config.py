@@ -5,8 +5,10 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # LLM
+    use_direct_anthropic: bool = False
     anthropic_api_key: str = ""
     anthropic_base_url: str = "https://clear-llm-proxy.internal.cleartax.co"
+    anthropic_direct_api_key: str = ""
     anthropic_model: str = "claude-sonnet-4-5"
 
     # BE service

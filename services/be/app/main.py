@@ -229,6 +229,7 @@ from app.routes.portfolio import router as portfolio_router
 from app.routes.orders import router as orders_router
 from app.routes.market import router as market_router
 from app.routes.conversations import router as conversations_router
+from app.routes.notifications import router as notifications_router
 from app.routes.alerts import router as alerts_router
 from app.routes.analytics import router as analytics_router
 from app.routes.wellbeing import router as wellbeing_router
@@ -245,6 +246,7 @@ app.include_router(portfolio_router)
 app.include_router(orders_router)
 app.include_router(market_router)
 app.include_router(conversations_router)
+app.include_router(notifications_router)
 app.include_router(alerts_router)
 app.include_router(analytics_router)
 app.include_router(wellbeing_router)

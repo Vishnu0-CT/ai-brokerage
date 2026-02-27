@@ -61,9 +61,10 @@ export default function Dashboard() {
     }
   }, [balance, positions, priceUpdates])
 
-  const dailyLossLimit = balanceWithRealTimePrices?.daily_loss_limit || 25000
-  const pnl = balanceWithRealTimePrices?.total_pnl || 0
-  const bufferRemaining = dailyLossLimit - Math.abs(Math.min(0, pnl))
+  // Use risk metrics for daily loss limit, falling back to balance
+  const dailyLossLimit = riskMetrics?.daily_loss_limit || balanceWithRealTimePrices?.daily_loss_limit || 25000
+  const todayPnl = riskMetrics?.today_stats?.pnl ?? balanceWithRealTimePrices?.total_pnl ?? 0
+  const bufferRemaining = dailyLossLimit - Math.abs(Math.min(0, todayPnl))
   const bufferPercent = (bufferRemaining / dailyLossLimit) * 100
 
   const handleLimitSave = async () => {
